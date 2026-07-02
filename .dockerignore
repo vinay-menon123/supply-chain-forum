@@ -1,0 +1,7 @@
+**/node_modules
+**/dist
+backend/uploads
+.env
+.git
+k8s
+*.md
