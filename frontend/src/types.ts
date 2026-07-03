@@ -13,6 +13,7 @@ export interface Profile {
   user: User;
   stats: { questions: number; comments: number; upvotesReceived: number };
   questions: Question[];
+  commented: Question[];
 }
 
 export interface ChatMessage {

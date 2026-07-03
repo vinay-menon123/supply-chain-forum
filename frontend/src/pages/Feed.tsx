@@ -87,7 +87,21 @@ export default function Feed() {
 
       <div className="space-y-4">
         {data?.questions.map((question) => (
-          <QuestionCard key={question.id} question={question} />
+          <QuestionCard
+            key={question.id}
+            question={question}
+            onDeleted={(id) =>
+              setData((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      questions: prev.questions.filter((q) => q.id !== id),
+                      total: prev.total - 1,
+                    }
+                  : prev
+              )
+            }
+          />
         ))}
       </div>
     </div>

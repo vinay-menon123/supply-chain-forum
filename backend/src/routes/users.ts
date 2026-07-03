@@ -6,6 +6,13 @@ const router = Router();
 
 const authorSelect = { select: { id: true, username: true, avatarUrl: true } };
 
+function withVoteFields<T extends { votes: { userId: string }[]; _count: { votes: number } }>(
+  question: T
+) {
+  const { votes, ...rest } = question;
+  return { ...rest, voteCount: question._count.votes, viewerHasVoted: votes.length > 0 };
+}
+
 router.get("/:username", optionalAuth, async (req: AuthRequest, res, next) => {
   try {
     const user = await prisma.user.findUnique({
@@ -22,17 +29,24 @@ router.get("/:username", optionalAuth, async (req: AuthRequest, res, next) => {
     });
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const [upvotesReceived, questions] = await Promise.all([
+    const questionInclude = {
+      author: authorSelect,
+      votes: { where: { userId: req.userId ?? "" }, select: { userId: true } },
+      _count: { select: { comments: true, votes: true } },
+    };
+    const [upvotesReceived, questions, commented] = await Promise.all([
       prisma.vote.count({ where: { question: { authorId: user.id } } }),
       prisma.question.findMany({
         where: { authorId: user.id },
         orderBy: { createdAt: "desc" },
         take: 20,
-        include: {
-          author: authorSelect,
-          votes: { where: { userId: req.userId ?? "" }, select: { userId: true } },
-          _count: { select: { comments: true, votes: true } },
-        },
+        include: questionInclude,
+      }),
+      prisma.question.findMany({
+        where: { comments: { some: { authorId: user.id } } },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        include: questionInclude,
       }),
     ]);
 
@@ -50,11 +64,8 @@ router.get("/:username", optionalAuth, async (req: AuthRequest, res, next) => {
         comments: user._count.comments,
         upvotesReceived,
       },
-      questions: questions.map(({ votes, ...q }) => ({
-        ...q,
-        voteCount: q._count.votes,
-        viewerHasVoted: votes.length > 0,
-      })),
+      questions: questions.map(withVoteFields),
+      commented: commented.map(withVoteFields),
     });
   } catch (err) {
     next(err);

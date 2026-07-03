@@ -18,15 +18,29 @@ export default function Profile() {
   const { username } = useParams<{ username: string }>();
   const { user: viewer } = useAuth();
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [tab, setTab] = useState<"questions" | "commented">("questions");
   const [error, setError] = useState("");
 
   useEffect(() => {
     setProfile(null);
+    setTab("questions");
     setError("");
     api<ProfileData>(`/users/${username}`)
       .then(setProfile)
       .catch((err) => setError(err.message));
   }, [username]);
+
+  function removeQuestion(id: string) {
+    setProfile((prev) =>
+      prev
+        ? {
+            ...prev,
+            questions: prev.questions.filter((q) => q.id !== id),
+            commented: prev.commented.filter((q) => q.id !== id),
+          }
+        : prev
+    );
+  }
 
   if (error) {
     return (
@@ -96,16 +110,32 @@ export default function Profile() {
       </div>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {isSelf ? "Your questions" : `Questions by @${user.username}`}
-        </h2>
+        <div className="mb-4 flex items-center gap-1 rounded-full bg-slate-100 p-1 dark:bg-slate-900 w-fit">
+          <button
+            onClick={() => setTab("questions")}
+            className={`pill ${tab === "questions" ? "pill-active" : "pill-inactive"}`}
+          >
+            ❓ Questions ({profile.questions.length})
+          </button>
+          <button
+            onClick={() => setTab("commented")}
+            className={`pill ${tab === "commented" ? "pill-active" : "pill-inactive"}`}
+          >
+            💬 Commented on ({profile.commented.length})
+          </button>
+        </div>
         <div className="space-y-4">
-          {questions.map((question) => (
-            <QuestionCard key={question.id} question={question} />
+          {(tab === "questions" ? questions : profile.commented).map((question) => (
+            <QuestionCard key={question.id} question={question} onDeleted={removeQuestion} />
           ))}
-          {questions.length === 0 && (
+          {tab === "questions" && questions.length === 0 && (
             <p className="card text-center text-slate-500 dark:text-slate-400">
               No questions yet.
+            </p>
+          )}
+          {tab === "commented" && profile.commented.length === 0 && (
+            <p className="card text-center text-slate-500 dark:text-slate-400">
+              {isSelf ? "You haven't" : `@${user.username} hasn't`} commented on any posts yet.
             </p>
           )}
         </div>
