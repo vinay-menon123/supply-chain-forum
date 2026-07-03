@@ -51,6 +51,11 @@ spec:
                 secretKeyRef:
                   name: forum-secrets
                   key: GOOGLE_CLIENT_ID
+            - name: ADMIN_EMAILS
+              valueFrom:
+                secretKeyRef:
+                  name: forum-secrets
+                  key: ADMIN_EMAILS
           volumeMounts:
             - name: uploads
               mountPath: /app/uploads

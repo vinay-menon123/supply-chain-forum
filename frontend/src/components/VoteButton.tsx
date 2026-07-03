@@ -15,6 +15,7 @@ export default function VoteButton({ question }: Props) {
   const [count, setCount] = useState(question.voteCount);
   const [voted, setVoted] = useState(question.viewerHasVoted);
   const [busy, setBusy] = useState(false);
+  const [pop, setPop] = useState(false);
 
   async function toggle() {
     if (!user) {
@@ -30,6 +31,10 @@ export default function VoteButton({ question }: Props) {
       );
       setCount(data.voteCount);
       setVoted(data.viewerHasVoted);
+      if (data.viewerHasVoted) {
+        setPop(true);
+        setTimeout(() => setPop(false), 300);
+      }
     } catch {
       // leave the previous state on failure
     } finally {
@@ -42,10 +47,12 @@ export default function VoteButton({ question }: Props) {
       onClick={toggle}
       disabled={busy}
       title={voted ? "Remove upvote" : "Upvote"}
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-all active:scale-90 ${
+        pop ? "scale-125" : ""
+      } ${
         voted
-          ? "border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700"
-          : "border-slate-300 bg-white text-slate-600 hover:border-indigo-400 hover:text-indigo-600"
+          ? "border-transparent bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm"
+          : "border-slate-300 bg-white text-slate-600 hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-500 dark:hover:text-indigo-400"
       }`}
     >
       <span aria-hidden>▲</span> {count}

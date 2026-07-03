@@ -4,8 +4,11 @@ import cors from "cors";
 import fs from "fs";
 import path from "path";
 import { MulterError } from "multer";
+import adminRoutes from "./routes/admin";
 import authRoutes from "./routes/auth";
+import messageRoutes from "./routes/messages";
 import questionRoutes from "./routes/questions";
+import userRoutes from "./routes/users";
 
 const app = express();
 
@@ -16,6 +19,9 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/questions", questionRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Single-image deployments (e.g. Railway) bake the frontend build into
 // ./public; compose/k8s use a separate nginx container instead, so skip if absent

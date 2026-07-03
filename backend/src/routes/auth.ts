@@ -8,12 +8,22 @@ const router = Router();
 const googleClientId = process.env.GOOGLE_CLIENT_ID || "";
 const googleClient = new OAuth2Client(googleClientId);
 
+// Comma-separated list of emails that get the ADMIN role on sign-in.
+// The env var is authoritative: adding/removing an email changes the
+// user's role the next time they log in.
+const adminEmails = (process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
 const userSelect = {
   id: true,
   email: true,
   username: true,
   name: true,
   avatarUrl: true,
+  role: true,
+  isBanned: true,
   createdAt: true,
 };
 
@@ -66,6 +76,7 @@ router.post("/google", async (req, res, next) => {
     }
 
     const { sub: googleId, email, name, picture } = payload;
+    const role = adminEmails.includes(email.toLowerCase()) ? ("ADMIN" as const) : ("USER" as const);
     const existing = await prisma.user.findFirst({
       where: { OR: [{ googleId }, { email }] },
       select: { id: true },
@@ -74,7 +85,7 @@ router.post("/google", async (req, res, next) => {
     const user = existing
       ? await prisma.user.update({
           where: { id: existing.id },
-          data: { googleId, name: name ?? undefined, avatarUrl: picture ?? undefined },
+          data: { googleId, role, name: name ?? undefined, avatarUrl: picture ?? undefined },
           select: userSelect,
         })
       : await prisma.user.create({
@@ -84,6 +95,7 @@ router.post("/google", async (req, res, next) => {
             username: await uniqueUsername(email),
             name: name ?? null,
             avatarUrl: picture ?? null,
+            role,
           },
           select: userSelect,
         });

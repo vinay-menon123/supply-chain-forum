@@ -126,7 +126,16 @@ npm run dev
 | GET    | `/api/questions/:id`          | –    | Question detail with comments        |
 | POST   | `/api/questions/:id/vote`     | ✅   | Toggle upvote → `{ voteCount, viewerHasVoted }` |
 | POST   | `/api/questions/:id/comments` | ✅   | Add a comment (`multipart/form-data`: body, image?) |
+| DELETE | `/api/questions/:id`          | ✅   | Delete question (author or admin)    |
+| DELETE | `/api/questions/:id/comments/:commentId` | ✅ | Delete comment (author or admin) |
 | POST   | `/api/questions/:id/share`    | –    | Increment share counter              |
+| GET    | `/api/users/:username`        | –    | Public profile: stats + questions    |
+| GET    | `/api/messages`               | ✅   | Conversation list with unread counts |
+| GET    | `/api/messages/unread`        | ✅   | Total unread message count           |
+| GET    | `/api/messages/:username`     | ✅   | Thread with a user (marks as read)   |
+| POST   | `/api/messages/:username`     | ✅   | Send a direct message                |
+| GET    | `/api/admin/flagged`          | 🛡️   | Flagged/banned users (admin only)    |
+| POST   | `/api/admin/users/:id/ban`    | 🛡️   | Ban or unban a user (admin only)     |
 | GET    | `/api/health`                 | –    | Health check                         |
 
 Authenticated requests send `Authorization: Bearer <token>`.
@@ -135,7 +144,23 @@ Authenticated requests send `Authorization: Bearer <token>`.
 
 - **Authentication** — Google Sign-In only (emails are verified by Google), JWT sessions (7-day expiry)
 - **Questions** — title + rich text body + optional image upload (JPEG/PNG/GIF/WebP, ≤ 5 MB), stored on a persistent volume
-- **Upvotes** — one vote per user per question, click again to remove
+- **Upvotes** — one vote per user per question, click again to remove; feed sortable by Newest / Top
 - **Comments** — discussion under each question, with optional image attachments
 - **Share** — native share sheet where available, clipboard fallback, with a share counter
 - **Search** — case-insensitive search across titles and bodies
+- **Dark mode** — toggle in the navbar, follows system preference by default
+- **User profiles** — click any username: avatar, stats (questions / comments / upvotes received), their posts, and a Message button
+- **Direct messages** — 1:1 chat with unread badges (polling-based)
+- **Moderation** — profanity is auto-removed before it's stored; authors are flagged, and accounts auto-suspend after 5 flags. Question/comment deletion by the author or an admin
+- **Admin role** — emails listed in `ADMIN_EMAILS` become admins on sign-in and get a moderation dashboard (`/admin`) to review flags and ban/unban
+
+## Environment variables (backend)
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | Signing key for session tokens |
+| `GOOGLE_CLIENT_ID` | OAuth 2.0 Web Client ID for Google Sign-In |
+| `ADMIN_EMAILS` | Comma-separated emails granted the ADMIN role on sign-in |
+| `MODERATION_BAN_THRESHOLD` | Flags before auto-suspension (default 5) |
+| `PORT` | Listen port (default 4000) |

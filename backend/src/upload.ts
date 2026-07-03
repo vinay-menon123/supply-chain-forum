@@ -24,3 +24,9 @@ export const imageUpload = multer({
     else cb(new Error("Only JPEG, PNG, GIF and WebP images are allowed"));
   },
 });
+
+// Multer saves to disk before route handlers run; call this when the
+// request is rejected so the orphaned file doesn't linger
+export function discardUpload(file?: Express.Multer.File) {
+  if (file) fs.unlink(file.path, () => {});
+}

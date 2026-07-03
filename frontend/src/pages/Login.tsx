@@ -99,30 +99,34 @@ export default function Login() {
 
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="mb-2 text-center text-2xl font-bold text-slate-900">Welcome</h1>
-      <p className="mb-6 text-center text-sm text-slate-600">
+      <h1 className="heading mb-2 text-center">Welcome</h1>
+      <p className="mb-6 text-center text-sm text-slate-600 dark:text-slate-400">
         Sign in with Google — we use your verified Google email, so no passwords to remember.
       </p>
       <div className="card flex flex-col items-center gap-4 py-8">
-        {status === "loading" && <p className="text-sm text-slate-500">Loading sign-in…</p>}
+        {status === "loading" && (
+          <p className="text-sm text-slate-500 dark:text-slate-400">Loading sign-in…</p>
+        )}
         {status === "error" && (
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-red-600 dark:text-red-400">
             Could not load Google Sign-In. Check your connection and refresh.
           </p>
         )}
         {status === "unconfigured" && (
-          <div className="px-4 text-sm text-slate-600">
-            <p className="font-medium text-slate-800">Google Sign-In is not configured.</p>
+          <div className="px-4 text-sm text-slate-600 dark:text-slate-400">
+            <p className="font-medium text-slate-800 dark:text-slate-200">
+              Google Sign-In is not configured.
+            </p>
             <p className="mt-2">
               Create an OAuth 2.0 Web Client ID in the Google Cloud Console, add this site's
               origin to its authorized JavaScript origins, and set{" "}
-              <code className="rounded bg-slate-100 px-1">GOOGLE_CLIENT_ID</code> on the
-              backend.
+              <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">GOOGLE_CLIENT_ID</code>{" "}
+              on the backend.
             </p>
           </div>
         )}
         <div ref={buttonRef} className={status === "ready" ? "" : "hidden"} />
-        {error && <p className="px-4 text-sm text-red-600">{error}</p>}
+        {error && <p className="px-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
       </div>
     </div>
   );

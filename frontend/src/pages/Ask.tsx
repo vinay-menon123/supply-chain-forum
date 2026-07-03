@@ -45,7 +45,7 @@ export default function Ask() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-slate-900">Ask a Question</h1>
+      <h1 className="heading mb-6">Ask a Question</h1>
       <form onSubmit={handleSubmit} className="card space-y-4">
         <div>
           <label className="label" htmlFor="title">
@@ -87,19 +87,19 @@ export default function Ask() {
             type="file"
             accept="image/jpeg,image/png,image/gif,image/webp"
             onChange={handleImageChange}
-            className="block w-full text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+            className="block w-full text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:text-slate-400 dark:file:bg-indigo-950 dark:file:text-indigo-300"
           />
           {preview && (
             <div className="mt-3 flex items-start gap-3">
               <img
                 src={preview}
                 alt="Preview"
-                className="max-h-48 rounded-lg border border-slate-200 object-contain"
+                className="max-h-48 rounded-lg border border-slate-200 object-contain dark:border-slate-700"
               />
               <button
                 type="button"
                 onClick={() => setImage(null)}
-                className="text-sm text-slate-500 hover:text-red-600"
+                className="text-sm text-slate-500 hover:text-red-600 dark:text-slate-400"
               >
                 Remove
               </button>
@@ -107,7 +107,7 @@ export default function Ask() {
           )}
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <button type="submit" className="btn-primary" disabled={submitting}>
           {submitting ? "Posting…" : "Post Question"}

@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { AuthRequest, optionalAuth, requireAuth } from "../middleware/auth";
-import { imageUpload } from "../upload";
+import { AuthRequest, optionalAuth, requireActiveUser } from "../middleware/auth";
+import { rejectIfProfane } from "../moderation";
+import { discardUpload, imageUpload } from "../upload";
 
 const router = Router();
 
@@ -30,6 +31,10 @@ router.get("/", optionalAuth, async (req: AuthRequest, res, next) => {
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = 20;
+    const orderBy =
+      req.query.sort === "top"
+        ? [{ votes: { _count: "desc" as const } }, { createdAt: "desc" as const }]
+        : [{ createdAt: "desc" as const }];
     const where = q
       ? {
           OR: [
@@ -42,7 +47,7 @@ router.get("/", optionalAuth, async (req: AuthRequest, res, next) => {
     const [questions, total] = await Promise.all([
       prisma.question.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
@@ -59,12 +64,25 @@ router.get("/", optionalAuth, async (req: AuthRequest, res, next) => {
   }
 });
 
-router.post("/", requireAuth, imageUpload.single("image"), async (req: AuthRequest, res, next) => {
+router.post("/", requireActiveUser, imageUpload.single("image"), async (req: AuthRequest, res, next) => {
   try {
     const parsed = questionSchema.safeParse(req.body);
     if (!parsed.success) {
+      discardUpload(req.file);
       return res.status(400).json({ error: parsed.error.issues[0].message });
     }
+
+    const violation = await rejectIfProfane(
+      req.userId!,
+      "question",
+      parsed.data.title,
+      parsed.data.body
+    );
+    if (violation) {
+      discardUpload(req.file);
+      return res.status(400).json({ error: violation });
+    }
+
     const question = await prisma.question.create({
       data: {
         ...parsed.data,
@@ -101,7 +119,25 @@ router.get("/:id", optionalAuth, async (req: AuthRequest, res, next) => {
   }
 });
 
-router.post("/:id/vote", requireAuth, async (req: AuthRequest, res, next) => {
+// Author or admin can delete a question (comments/votes cascade)
+router.delete("/:id", requireActiveUser, async (req: AuthRequest, res, next) => {
+  try {
+    const question = await prisma.question.findUnique({
+      where: { id: req.params.id },
+      select: { authorId: true },
+    });
+    if (!question) return res.status(404).json({ error: "Question not found" });
+    if (question.authorId !== req.userId && req.currentUser?.role !== "ADMIN") {
+      return res.status(403).json({ error: "You can only delete your own questions" });
+    }
+    await prisma.question.delete({ where: { id: req.params.id } });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:id/vote", requireActiveUser, async (req: AuthRequest, res, next) => {
   try {
     const questionId = req.params.id;
     const question = await prisma.question.findUnique({
@@ -131,19 +167,29 @@ const commentSchema = z.object({
 
 router.post(
   "/:id/comments",
-  requireAuth,
+  requireActiveUser,
   imageUpload.single("image"),
   async (req: AuthRequest, res, next) => {
     try {
       const parsed = commentSchema.safeParse(req.body);
       if (!parsed.success) {
+        discardUpload(req.file);
         return res.status(400).json({ error: parsed.error.issues[0].message });
       }
       const question = await prisma.question.findUnique({
         where: { id: req.params.id },
         select: { id: true },
       });
-      if (!question) return res.status(404).json({ error: "Question not found" });
+      if (!question) {
+        discardUpload(req.file);
+        return res.status(404).json({ error: "Question not found" });
+      }
+
+      const violation = await rejectIfProfane(req.userId!, "comment", parsed.data.body);
+      if (violation) {
+        discardUpload(req.file);
+        return res.status(400).json({ error: violation });
+      }
 
       const comment = await prisma.comment.create({
         data: {
@@ -160,6 +206,26 @@ router.post(
     }
   }
 );
+
+// Author or admin can delete a comment
+router.delete("/:id/comments/:commentId", requireActiveUser, async (req: AuthRequest, res, next) => {
+  try {
+    const comment = await prisma.comment.findUnique({
+      where: { id: req.params.commentId },
+      select: { authorId: true, questionId: true },
+    });
+    if (!comment || comment.questionId !== req.params.id) {
+      return res.status(404).json({ error: "Comment not found" });
+    }
+    if (comment.authorId !== req.userId && req.currentUser?.role !== "ADMIN") {
+      return res.status(403).json({ error: "You can only delete your own comments" });
+    }
+    await prisma.comment.delete({ where: { id: req.params.commentId } });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post("/:id/share", async (req, res, next) => {
   try {

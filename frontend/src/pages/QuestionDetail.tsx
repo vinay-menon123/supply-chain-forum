@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, apiForm } from "../api";
 import { useAuth } from "../auth";
 import ShareButton from "../components/ShareButton";
@@ -10,6 +10,7 @@ import type { Comment, Question } from "../types";
 export default function QuestionDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [question, setQuestion] = useState<Question | null>(null);
   const [error, setError] = useState("");
   const [commentBody, setCommentBody] = useState("");
@@ -17,6 +18,8 @@ export default function QuestionDetail() {
   const [imagePreview, setImagePreview] = useState("");
   const [commentError, setCommentError] = useState("");
   const [posting, setPosting] = useState(false);
+
+  const isAdmin = user?.role === "ADMIN";
 
   useEffect(() => {
     setQuestion(null);
@@ -63,70 +66,125 @@ export default function QuestionDetail() {
     }
   }
 
+  async function deleteQuestion() {
+    if (!question) return;
+    if (!window.confirm("Delete this question and all its comments?")) return;
+    try {
+      await api(`/questions/${question.id}`, { method: "DELETE" });
+      navigate("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete");
+    }
+  }
+
+  async function deleteComment(commentId: string) {
+    if (!window.confirm("Delete this comment?")) return;
+    try {
+      await api(`/questions/${id}/comments/${commentId}`, { method: "DELETE" });
+      setQuestion((prev) =>
+        prev
+          ? { ...prev, comments: (prev.comments ?? []).filter((c) => c.id !== commentId) }
+          : prev
+      );
+    } catch (err) {
+      setCommentError(err instanceof Error ? err.message : "Failed to delete comment");
+    }
+  }
+
   if (error) {
     return (
       <div className="card text-center">
-        <p className="text-red-600">{error}</p>
-        <Link to="/" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
+        <p className="text-red-600 dark:text-red-400">{error}</p>
+        <Link
+          to="/"
+          className="mt-3 inline-block text-sm text-indigo-600 hover:underline dark:text-indigo-400"
+        >
           ← Back to questions
         </Link>
       </div>
     );
   }
   if (!question) {
-    return <p className="py-8 text-center text-slate-500">Loading…</p>;
+    return <p className="py-8 text-center text-slate-500 dark:text-slate-400">Loading…</p>;
   }
 
   const comments = question.comments ?? [];
+  const canDeleteQuestion = user && (user.id === question.author.id || isAdmin);
 
   return (
     <div className="space-y-6">
       <article className="card">
-        <h1 className="text-2xl font-bold text-slate-900">{question.title}</h1>
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="heading">{question.title}</h1>
+          {canDeleteQuestion && (
+            <button onClick={deleteQuestion} className="btn-danger flex-none" title="Delete question">
+              🗑 Delete
+            </button>
+          )}
+        </div>
+        <div className="meta mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
           <VoteButton question={question} />
-          <span className="font-medium text-slate-700">@{question.author.username}</span>
+          <Link to={`/users/${question.author.username}`} className="username-link">
+            @{question.author.username}
+          </Link>
           <span>{timeAgo(question.createdAt)}</span>
           <ShareButton question={question} />
         </div>
-        <p className="mt-4 whitespace-pre-wrap text-slate-700">{question.body}</p>
+        <p className="mt-4 whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+          {question.body}
+        </p>
         {question.imageUrl && (
           <a href={question.imageUrl} target="_blank" rel="noreferrer">
             <img
               src={question.imageUrl}
               alt="Question attachment"
-              className="mt-4 max-h-96 rounded-lg border border-slate-200 object-contain"
+              className="mt-4 max-h-96 rounded-lg border border-slate-200 object-contain dark:border-slate-700"
             />
           </a>
         )}
       </article>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">
+        <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">
           {comments.length} {comments.length === 1 ? "Comment" : "Comments"}
         </h2>
 
         <div className="space-y-3">
           {comments.map((comment) => (
             <div key={comment.id} className="card py-4">
-              <div className="mb-1 flex items-center gap-3 text-xs text-slate-500">
-                <span className="font-medium text-slate-700">@{comment.author.username}</span>
+              <div className="meta mb-1 flex items-center gap-3">
+                <Link to={`/users/${comment.author.username}`} className="username-link">
+                  @{comment.author.username}
+                </Link>
                 <span>{timeAgo(comment.createdAt)}</span>
+                {user && (user.id === comment.author.id || isAdmin) && (
+                  <button
+                    onClick={() => deleteComment(comment.id)}
+                    className="btn-danger ml-auto"
+                    title="Delete comment"
+                  >
+                    🗑
+                  </button>
+                )}
               </div>
-              <p className="whitespace-pre-wrap text-sm text-slate-700">{comment.body}</p>
+              <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
+                {comment.body}
+              </p>
               {comment.imageUrl && (
                 <a href={comment.imageUrl} target="_blank" rel="noreferrer">
                   <img
                     src={comment.imageUrl}
                     alt="Comment attachment"
-                    className="mt-2 max-h-64 rounded-lg border border-slate-200 object-contain"
+                    className="mt-2 max-h-64 rounded-lg border border-slate-200 object-contain dark:border-slate-700"
                   />
                 </a>
               )}
             </div>
           ))}
           {comments.length === 0 && (
-            <p className="text-sm text-slate-500">No comments yet.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              No comments yet — start the discussion! 💡
+            </p>
           )}
         </div>
 
@@ -157,7 +215,7 @@ export default function QuestionDetail() {
                 <button
                   type="button"
                   onClick={() => setCommentImage(null)}
-                  className="text-xs text-slate-500 hover:text-red-600"
+                  className="text-xs text-slate-500 hover:text-red-600 dark:text-slate-400"
                 >
                   Remove image
                 </button>
@@ -167,10 +225,12 @@ export default function QuestionDetail() {
               <img
                 src={imagePreview}
                 alt="Preview"
-                className="mt-3 max-h-40 rounded-lg border border-slate-200 object-contain"
+                className="mt-3 max-h-40 rounded-lg border border-slate-200 object-contain dark:border-slate-700"
               />
             )}
-            {commentError && <p className="mt-2 text-sm text-red-600">{commentError}</p>}
+            {commentError && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400">{commentError}</p>
+            )}
             <button
               type="submit"
               className="btn-primary mt-3"
@@ -180,11 +240,11 @@ export default function QuestionDetail() {
             </button>
           </form>
         ) : (
-          <p className="mt-4 text-sm text-slate-600">
+          <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
             <Link
               to="/login"
               state={{ from: `/questions/${question.id}` }}
-              className="font-medium text-indigo-600 hover:underline"
+              className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
             >
               Sign in with Google
             </Link>{" "}

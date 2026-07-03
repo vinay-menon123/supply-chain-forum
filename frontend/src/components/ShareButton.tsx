@@ -31,11 +31,11 @@ export default function ShareButton({ question }: Props) {
   return (
     <button
       onClick={handleShare}
-      className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-indigo-600"
+      className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400"
       title="Share this question"
     >
       {copied ? (
-        <span className="text-emerald-600">Link copied!</span>
+        <span className="text-emerald-600 dark:text-emerald-400">Link copied!</span>
       ) : (
         <>
           <span aria-hidden>↗</span> Share{count > 0 ? ` · ${count}` : ""}

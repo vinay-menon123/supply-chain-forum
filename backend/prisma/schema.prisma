@@ -8,17 +8,53 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 model User {
-  id        String     @id @default(cuid())
-  email     String     @unique
-  username  String     @unique
-  googleId  String?    @unique
-  name      String?
-  avatarUrl String?
-  createdAt DateTime   @default(now())
-  questions Question[]
-  comments  Comment[]
-  votes     Vote[]
+  id               String            @id @default(cuid())
+  email            String            @unique
+  username         String            @unique
+  googleId         String?           @unique
+  name             String?
+  avatarUrl        String?
+  role             Role              @default(USER)
+  flagCount        Int               @default(0)
+  isBanned         Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  questions        Question[]
+  comments         Comment[]
+  votes            Vote[]
+  sentMessages     Message[]         @relation("sentMessages")
+  receivedMessages Message[]         @relation("receivedMessages")
+  moderationEvents ModerationEvent[]
+}
+
+model Message {
+  id        String    @id @default(cuid())
+  body      String
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+  from      User      @relation("sentMessages", fields: [fromId], references: [id], onDelete: Cascade)
+  fromId    String
+  to        User      @relation("receivedMessages", fields: [toId], references: [id], onDelete: Cascade)
+  toId      String
+
+  @@index([fromId, toId, createdAt])
+  @@index([toId, readAt])
+}
+
+model ModerationEvent {
+  id        String   @id @default(cuid())
+  kind      String // question | comment | message
+  content   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+
+  @@index([userId])
 }
 
 model Question {
