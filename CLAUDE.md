@@ -89,8 +89,12 @@ original Node/Express/Prisma backend, which now lives only in git history.)
 - **Direct messages:** 1:1 chat with read tracking, unread badge. Polling (4s thread / 20s unread).
 - **Moderation:** wordlist + optional AI. Flag → auto-ban at 5 flags. Admin dashboard.
 - **Admin** (`ADMIN_EMAILS`): delete any question/comment, view flagged users, ban/unban,
-  verification review, **seed starter content** (`POST /api/admin/seed`, idempotent — 2 AI×supply-chain
-  Q&As + human seed users Priya Sharma / Daniel Okafor), send test digest.
+  verification review, **seed starter content** (`POST /api/admin/seed`), send test digest.
+  Seed uses **replace semantics**: each run deletes the legacy prototype accounts
+  (`demo_user`/`user_two`) + prior seed members (content cascades away) then inserts 5 realistic
+  members (Priya Sharma, Daniel Okafor, Rahul Verma, Ana Ferreira, Meera Iyer) with 5 practitioner-
+  voice Q&As + 12 answers across Digital&AI / Demand Planning / Warehousing / Procurement / Careers.
+  Safe to re-run. Seed text is ASCII-only (avoids cp1252 mojibake like the old "K�rber").
 - **Events & webinars** (`/events`): admins create, members RSVP; upcoming/past sections.
 - **Mentorship** (`/mentorship`): opt in as mentor/mentee at onboarding; browse + connect via DMs.
 - **Weekly digest email:** top-5 questions of the week to all non-banned users, Mondays.
@@ -192,11 +196,17 @@ is a fresh `CREATE TABLE IF NOT EXISTS` (kind/category/title/description/locatio
 ## 9. Testing without Google
 
 Mint HS256 JWTs by hand (sub = userId). Key rule = §3 (secret <32 bytes → `sha256(secret)`
-as the HMAC key). Seeded test users:
-- `demo_user` — id `cmr3qfvrw0000mp2rdeu0pscd` (made ADMIN via SQL)
-- `user_two` — id `testuser2xxxxxxxxxxxxxxxx`
-
-Tokens have a 2h TTL — re-mint if you get blanket 401s.
+as the HMAC key). **The old `demo_user`/`user_two` prototype accounts are now DELETED by the
+seed** (their content looked fake). To test without Google, insert a throwaway admin via SQL and
+mint a token for its id, e.g.:
+```sql
+INSERT INTO "User" (id,email,username,role,"memberType","verifyStatus")
+VALUES ('smoketestadmin0000000000001','smoke@test.local','smoke_admin','ADMIN','PROFESSIONAL','APPROVED')
+ON CONFLICT (id) DO UPDATE SET role='ADMIN';
+```
+Then `sub=smoketestadmin0000000000001`. Tokens have a 2h TTL — re-mint if you get blanket 401s.
+The 5 real seed members (priya_sharma, daniel_okafor, rahul_verma, ana_ferreira, meera_iyer) have
+no `googleId`, so nobody can log in as them — they're content authors only.
 
 ---
 
