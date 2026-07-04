@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import TopicPicker, { formatTopics, parseTopics } from "../components/TopicPicker";
 import { MEMBER_TYPES } from "../memberTypes";
 import type { User } from "../types";
 
@@ -12,12 +13,21 @@ export default function Welcome() {
   const from = (location.state as { from?: string } | null)?.from ?? "/";
 
   const [memberType, setMemberType] = useState(user?.memberType ?? "");
+  const [headline, setHeadline] = useState(user?.headline ?? "");
+  const [linkedinUrl, setLinkedinUrl] = useState(user?.linkedinUrl ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [organization, setOrganization] = useState(user?.organization ?? "");
+  const [topics, setTopics] = useState<string[]>(parseTopics(user?.topics));
   const [openToMentor, setOpenToMentor] = useState(user?.openToMentor ?? false);
   const [seekingMentor, setSeekingMentor] = useState(user?.seekingMentor ?? false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  function toggleTopic(value: string) {
+    setTopics((prev) =>
+      prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value]
+    );
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -30,7 +40,16 @@ export default function Welcome() {
     try {
       const data = await api<{ user: User }>("/auth/profile", {
         method: "POST",
-        body: JSON.stringify({ memberType, phone, organization, openToMentor, seekingMentor }),
+        body: JSON.stringify({
+          memberType,
+          headline,
+          linkedinUrl,
+          phone,
+          organization,
+          topics: formatTopics(topics),
+          openToMentor,
+          seekingMentor,
+        }),
       });
       updateUser(data.user);
       navigate(from, { replace: true });
@@ -73,6 +92,36 @@ export default function Welcome() {
           </div>
         </div>
 
+        <div>
+          <label className="label" htmlFor="headline">
+            Your professional headline
+          </label>
+          <input
+            id="headline"
+            className="input"
+            placeholder="e.g. Procurement Manager at Acme Foods"
+            value={headline}
+            onChange={(e) => setHeadline(e.target.value)}
+            maxLength={160}
+          />
+          <p className="meta mt-1">
+            Helps us confirm you're in the supply chain field — we keep this community focused. 🔒
+          </p>
+        </div>
+
+        <div>
+          <label className="label" htmlFor="linkedin">
+            LinkedIn profile <span className="font-normal text-slate-400">(recommended)</span>
+          </label>
+          <input
+            id="linkedin"
+            className="input"
+            placeholder="https://www.linkedin.com/in/your-name"
+            value={linkedinUrl}
+            onChange={(e) => setLinkedinUrl(e.target.value)}
+          />
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="organization">
@@ -100,6 +149,14 @@ export default function Welcome() {
               onChange={(e) => setPhone(e.target.value)}
             />
           </div>
+        </div>
+
+        <div>
+          <span className="label">🔔 Topics you're interested in</span>
+          <p className="meta mb-3">
+            We'll email you when new questions are posted in these areas. Change anytime in Settings.
+          </p>
+          <TopicPicker selected={topics} onToggle={toggleTopic} />
         </div>
 
         <div>

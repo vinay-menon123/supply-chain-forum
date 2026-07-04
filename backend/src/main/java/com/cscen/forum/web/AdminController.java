@@ -6,6 +6,8 @@ import com.cscen.forum.repo.ModerationEventRepository;
 import com.cscen.forum.repo.UserRepository;
 import com.cscen.forum.security.CurrentUser;
 import com.cscen.forum.service.DigestService;
+import com.cscen.forum.service.Json;
+import com.cscen.forum.service.SeedService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,13 +30,15 @@ public class AdminController {
     private final ModerationEventRepository events;
     private final CurrentUser currentUser;
     private final DigestService digest;
+    private final SeedService seed;
 
     public AdminController(UserRepository users, ModerationEventRepository events,
-                           CurrentUser currentUser, DigestService digest) {
+                           CurrentUser currentUser, DigestService digest, SeedService seed) {
         this.users = users;
         this.events = events;
         this.currentUser = currentUser;
         this.digest = digest;
+        this.seed = seed;
     }
 
     /** Fire the weekly digest immediately (for testing SMTP configuration). */
@@ -42,6 +46,47 @@ public class AdminController {
     public Map<String, Object> digestTest(HttpServletRequest http) {
         currentUser.requireAdmin(http);
         return Map.of("result", digest.sendDigest());
+    }
+
+    /** Seed the starter supply-chain × AI discussions (idempotent). */
+    @PostMapping("/seed")
+    public Map<String, Object> seedContent(HttpServletRequest http) {
+        currentUser.requireAdmin(http);
+        return Map.of("result", seed.seed());
+    }
+
+    /** Members awaiting supply-chain verification review (PENDING or REJECTED). */
+    @GetMapping("/pending")
+    public Map<String, Object> pending(HttpServletRequest http) {
+        currentUser.requireAdmin(http);
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (User user : users.findByVerifyStatusOrderByCreatedAtDesc("PENDING")) {
+            list.add(Json.publicUser(user));
+        }
+        for (User user : users.findByVerifyStatusOrderByCreatedAtDesc("REJECTED")) {
+            list.add(Json.publicUser(user));
+        }
+        return Map.of("users", list);
+    }
+
+    public record VerifyRequest(String status) {
+    }
+
+    /** Admin override of a member's supply-chain verification status. */
+    @PostMapping("/users/{id}/verify")
+    public Map<String, Object> verify(@PathVariable String id,
+                                      @RequestBody VerifyRequest request,
+                                      HttpServletRequest http) {
+        currentUser.requireAdmin(http);
+        String status = request == null || request.status() == null ? "" : request.status().trim().toUpperCase();
+        if (!status.equals("APPROVED") && !status.equals("REJECTED") && !status.equals("PENDING")) {
+            throw ApiException.badRequest("Status must be APPROVED, REJECTED or PENDING");
+        }
+        User user = users.findById(id)
+                .orElseThrow(() -> ApiException.notFound("User not found"));
+        user.setVerifyStatus(status);
+        users.save(user);
+        return Map.of("id", user.getId(), "username", user.getUsername(), "verifyStatus", status);
     }
 
     /** Users with moderation history, worst offenders first. */

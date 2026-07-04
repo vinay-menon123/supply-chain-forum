@@ -10,11 +10,13 @@ import Feed from "./pages/Feed";
 import Landing from "./pages/Landing";
 import Leaderboard from "./pages/Leaderboard";
 import Login from "./pages/Login";
+import Marketplace from "./pages/Marketplace";
 import Mentorship from "./pages/Mentorship";
 import Messages from "./pages/Messages";
 import MessageThread from "./pages/MessageThread";
 import Profile from "./pages/Profile";
 import QuestionDetail from "./pages/QuestionDetail";
+import Settings from "./pages/Settings";
 import Welcome from "./pages/Welcome";
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -34,7 +36,12 @@ export default function App() {
   const { user, loading } = useAuth();
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
+    <div className="relative min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
+      <div className="app-aurora">
+        <div className="blob left-[-6rem] top-[-8rem] h-72 w-72 bg-indigo-400/20 dark:bg-indigo-600/15" />
+        <div className="blob right-[-8rem] top-24 h-80 w-80 bg-fuchsia-400/15 dark:bg-fuchsia-600/10" />
+        <div className="blob bottom-[-10rem] left-1/3 h-80 w-80 bg-violet-400/10 dark:bg-violet-700/10" />
+      </div>
       <Navbar />
       {user?.isBanned && (
         <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-center text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
@@ -51,7 +58,7 @@ export default function App() {
           in the ecosystem.
         </div>
       )}
-      <main className="mx-auto max-w-3xl px-4 py-8">
+      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <Routes>
           <Route
             path="/"
@@ -63,6 +70,15 @@ export default function App() {
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/events" element={<Events />} />
           <Route path="/mentorship" element={<Mentorship />} />
+          <Route path="/marketplace" element={<Marketplace />} />
+          <Route
+            path="/settings"
+            element={
+              <RequireAuth>
+                <Settings />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/welcome"
             element={

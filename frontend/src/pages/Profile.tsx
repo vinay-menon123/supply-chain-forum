@@ -89,16 +89,48 @@ export default function Profile() {
                 {user.name || `@${user.username}`}
               </h1>
               <MemberTypeBadge memberType={user.memberType} />
+              {user.verifyStatus === "APPROVED" && (
+                <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                  ✅ Verified
+                </span>
+              )}
               {user.role === "ADMIN" && (
                 <span className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-2 py-0.5 text-xs font-bold text-white shadow-sm">
                   🛡️ ADMIN
                 </span>
               )}
             </div>
+            {user.headline && (
+              <p className="mt-0.5 text-sm font-medium text-slate-700 dark:text-slate-300">
+                {user.headline}
+              </p>
+            )}
             {user.name && <p className="meta">@{user.username}</p>}
             <p className="meta mt-1">
               {user.organization ? `${user.organization} · ` : ""}Member since {joined}
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {user.openToMentor && (
+                <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                  🎓 Mentor
+                </span>
+              )}
+              {user.seekingMentor && (
+                <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                  🌱 Seeking mentor
+                </span>
+              )}
+              {user.linkedinUrl && (
+                <a
+                  href={user.linkedinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="badge bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-950 dark:text-sky-300"
+                >
+                  in · LinkedIn ↗
+                </a>
+              )}
+            </div>
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="text-right">
@@ -107,13 +139,24 @@ export default function Profile() {
               </div>
               <div className="meta">reputation</div>
             </div>
-            {viewer && !isSelf && (
-              <Link to={`/messages/${user.username}`} className="btn-primary">
-                💬 Message
+            {isSelf ? (
+              <Link to="/settings" className="btn-secondary">
+                ⚙️ Edit profile
               </Link>
+            ) : (
+              viewer && (
+                <Link to={`/messages/${user.username}`} className="btn-primary">
+                  💬 Message
+                </Link>
+              )
             )}
           </div>
         </div>
+        {user.bio && (
+          <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
+            {user.bio}
+          </p>
+        )}
         <div className="mt-5 grid grid-cols-2 gap-4 rounded-lg bg-slate-50 p-4 dark:bg-slate-800/50 sm:grid-cols-4">
           <Stat value={stats.questions} label="Questions" />
           <Stat value={stats.comments} label="Comments" />

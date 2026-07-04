@@ -2,20 +2,52 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import MemberTypeBadge from "../components/MemberTypeBadge";
 import { timeAgo } from "../time";
-import type { FlaggedUser } from "../types";
+import type { FlaggedUser, User } from "../types";
 
 export default function Admin() {
   const { user } = useAuth();
   const [users, setUsers] = useState<FlaggedUser[] | null>(null);
+  const [pending, setPending] = useState<User[] | null>(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     if (user?.role !== "ADMIN") return;
     api<{ users: FlaggedUser[] }>("/admin/flagged")
       .then((data) => setUsers(data.users))
       .catch((err) => setError(err.message));
+    api<{ users: User[] }>("/admin/pending")
+      .then((data) => setPending(data.users))
+      .catch(() => {});
   }, [user]);
+
+  async function runTool(label: string, path: string) {
+    setBusy(label);
+    setNotice("");
+    try {
+      const data = await api<{ result: string }>(path, { method: "POST" });
+      setNotice(`${label}: ${data.result}`);
+    } catch (err) {
+      setNotice(`${label} failed: ${err instanceof Error ? err.message : "error"}`);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function verify(target: User, status: "APPROVED" | "REJECTED") {
+    try {
+      await api(`/admin/users/${target.id}/verify`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      });
+      setPending((prev) => prev?.filter((u) => u.id !== target.id) ?? prev);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Action failed");
+    }
+  }
 
   async function setBan(target: FlaggedUser, banned: boolean) {
     if (banned && !window.confirm(`Ban @${target.username}? They will no longer be able to post.`)) {
@@ -50,11 +82,100 @@ export default function Admin() {
 
   return (
     <div>
-      <h1 className="heading mb-2">🛡️ Moderation Dashboard</h1>
+      <h1 className="heading mb-2">🛡️ Admin Dashboard</h1>
       <p className="meta mb-6">
         Content containing profanity is auto-removed and the author is flagged. Accounts are
         suspended automatically after 5 flags — you can also ban or unban manually here.
       </p>
+
+      {/* Community tools */}
+      <div className="card mb-6">
+        <span className="section-title">Community tools</span>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={() => runTool("Seed", "/admin/seed")}
+            disabled={busy !== ""}
+            className="btn-secondary"
+          >
+            {busy === "Seed" ? "Seeding…" : "🌱 Seed starter discussions"}
+          </button>
+          <button
+            onClick={() => runTool("Digest", "/admin/digest/test")}
+            disabled={busy !== ""}
+            className="btn-secondary"
+          >
+            {busy === "Digest" ? "Sending…" : "📧 Send test digest"}
+          </button>
+        </div>
+        {notice && (
+          <p className="mt-3 rounded-lg bg-slate-50 p-2 text-sm text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
+            {notice}
+          </p>
+        )}
+      </div>
+
+      {/* Supply-chain verification review */}
+      <div className="mb-8">
+        <h2 className="mb-1 text-lg font-bold text-slate-900 dark:text-slate-100">
+          Membership verification
+        </h2>
+        <p className="meta mb-3">
+          Members whose supply-chain relevance needs a human decision. Approve to add a verified
+          badge, or reject to keep them flagged for review.
+        </p>
+        {pending && pending.length === 0 && (
+          <div className="card text-center text-slate-500 dark:text-slate-400">
+            Nobody awaiting review. ✨
+          </div>
+        )}
+        <div className="space-y-3">
+          {pending?.map((p) => (
+            <div key={p.id} className="card flex flex-wrap items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link to={`/users/${p.username}`} className="username-link font-semibold">
+                    {p.name ?? `@${p.username}`}
+                  </Link>
+                  <MemberTypeBadge memberType={p.memberType} small />
+                  <span
+                    className={`badge ${
+                      p.verifyStatus === "REJECTED"
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                    }`}
+                  >
+                    {p.verifyStatus === "REJECTED" ? "AI: not sure" : "pending"}
+                  </span>
+                </div>
+                {p.headline && <p className="meta mt-0.5">{p.headline}</p>}
+                {p.linkedinUrl && (
+                  <a
+                    href={p.linkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-sky-600 hover:underline dark:text-sky-400"
+                  >
+                    {p.linkedinUrl} ↗
+                  </a>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => verify(p, "APPROVED")} className="btn-primary text-sm">
+                  ✅ Approve
+                </button>
+                <button
+                  onClick={() => verify(p, "REJECTED")}
+                  className="btn-secondary text-sm text-red-600 dark:text-red-400"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <h2 className="mb-3 text-lg font-bold text-slate-900 dark:text-slate-100">Flagged members</h2>
 
       {error && <p className="card mb-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
       {!error && !users && (

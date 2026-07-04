@@ -31,6 +31,17 @@ public class AiModerationClient {
             promotion; otherwise OK. Professional criticism, strong technical \
             disagreement, and frustration with processes or tools are OK.""";
 
+    private static final String VERIFY_PROMPT = """
+            CSCE Nexus is a members-only community strictly for people working in or \
+            studying the supply chain, logistics, procurement, manufacturing, \
+            warehousing, transportation or operations field. You are given a new \
+            member's professional headline (and possibly a LinkedIn URL). Decide \
+            whether this person plausibly belongs to the supply chain / logistics \
+            ecosystem. Be inclusive of adjacent roles (operations, trade, freight, \
+            inventory, planning, sourcing, e-commerce fulfilment, supply chain \
+            academia/students). Respond with exactly one word: RELEVANT if they \
+            plausibly belong, otherwise UNRELATED.""";
+
     private final AnthropicClient client;
     private final String model;
 
@@ -79,6 +90,40 @@ public class AiModerationClient {
             return Optional.empty();
         } catch (Exception e) {
             log.warn("AI moderation unavailable, falling back to wordlist: {}", e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Judges whether a member's professional headline belongs to the supply
+     * chain field. Empty when disabled or on error — callers then leave the
+     * member PENDING for manual admin review (never a hard block).
+     */
+    public Optional<Boolean> isSupplyChainRelevant(String headline, String linkedinUrl) {
+        if (client == null || headline == null || headline.isBlank()) {
+            return Optional.empty();
+        }
+        String sample = "Headline: " + headline
+                + (linkedinUrl == null || linkedinUrl.isBlank() ? "" : "\nLinkedIn: " + linkedinUrl);
+        try {
+            MessageCreateParams params = MessageCreateParams.builder()
+                    .model(model)
+                    .maxTokens(16L)
+                    .system(VERIFY_PROMPT)
+                    .addUserMessage(sample)
+                    .build();
+            Message response = client.messages().create(params);
+            String verdict = response.content().stream()
+                    .flatMap(block -> block.text().stream())
+                    .map(t -> t.text().trim().toUpperCase(Locale.ROOT))
+                    .findFirst()
+                    .orElse("");
+            if (verdict.startsWith("RELEVANT")) return Optional.of(true);
+            if (verdict.startsWith("UNRELATED")) return Optional.of(false);
+            log.warn("AI verification returned unexpected verdict: {}", verdict);
+            return Optional.empty();
+        } catch (Exception e) {
+            log.warn("AI verification unavailable: {}", e.getMessage());
             return Optional.empty();
         }
     }

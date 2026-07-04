@@ -23,6 +23,18 @@ public class QuestionService {
             "GENERAL", "DEMAND_PLANNING", "PROCUREMENT", "MANUFACTURING", "LOGISTICS",
             "WAREHOUSING", "INVENTORY", "SUSTAINABILITY", "DIGITAL_AI", "RISK", "CAREERS");
 
+    private static final Map<String, String> TAG_LABELS = Map.ofEntries(
+            Map.entry("GENERAL", "General"), Map.entry("DEMAND_PLANNING", "Demand Planning"),
+            Map.entry("PROCUREMENT", "Procurement"), Map.entry("MANUFACTURING", "Manufacturing"),
+            Map.entry("LOGISTICS", "Logistics"), Map.entry("WAREHOUSING", "Warehousing"),
+            Map.entry("INVENTORY", "Inventory"), Map.entry("SUSTAINABILITY", "Sustainability"),
+            Map.entry("DIGITAL_AI", "Digital & AI"), Map.entry("RISK", "Risk Management"),
+            Map.entry("CAREERS", "Careers"));
+
+    public static String tagLabel(String tag) {
+        return TAG_LABELS.getOrDefault(tag, "Supply Chain");
+    }
+
     private final UserRepository users;
     private final CommentRepository comments;
     private final VoteRepository votes;

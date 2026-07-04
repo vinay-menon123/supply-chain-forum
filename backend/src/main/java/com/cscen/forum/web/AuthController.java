@@ -4,7 +4,9 @@ import com.cscen.forum.model.User;
 import com.cscen.forum.repo.UserRepository;
 import com.cscen.forum.security.CurrentUser;
 import com.cscen.forum.security.JwtService;
+import com.cscen.forum.service.AiModerationClient;
 import com.cscen.forum.service.Json;
+import com.cscen.forum.service.QuestionService;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
@@ -37,14 +39,16 @@ public class AuthController {
     private final UserRepository users;
     private final JwtService jwtService;
     private final CurrentUser currentUser;
+    private final AiModerationClient ai;
     private final String googleClientId;
     private final List<String> adminEmails;
 
     public AuthController(UserRepository users, JwtService jwtService,
-                          CurrentUser currentUser, Environment env) {
+                          CurrentUser currentUser, AiModerationClient ai, Environment env) {
         this.users = users;
         this.jwtService = jwtService;
         this.currentUser = currentUser;
+        this.ai = ai;
         this.googleClientId = env.getProperty("GOOGLE_CLIENT_ID", "");
         // Comma-separated list; authoritative on every sign-in so edits to the
         // env var promote/demote users on their next login
@@ -114,10 +118,16 @@ public class AuthController {
     }
 
     public record ProfileUpdate(String memberType, String phone, String organization,
-                                Boolean openToMentor, Boolean seekingMentor) {
+                                Boolean openToMentor, Boolean seekingMentor,
+                                String topics, String linkedinUrl, String headline, String bio) {
     }
 
-    /** Onboarding: member type (required) + optional phone / organization. */
+    /**
+     * Onboarding and edit-profile. Member type (required) can be changed any
+     * time. Topics drive email notifications; headline + LinkedIn drive the
+     * supply-chain relevance check (AI when configured, else left PENDING for
+     * admin review — never a hard block).
+     */
     @PostMapping("/profile")
     public Map<String, Object> updateProfile(@RequestBody ProfileUpdate request,
                                              HttpServletRequest http) {
@@ -144,7 +154,49 @@ public class AuthController {
         user.setOpenToMentor(Boolean.TRUE.equals(request.openToMentor()));
         user.setSeekingMentor(Boolean.TRUE.equals(request.seekingMentor()));
 
+        user.setTopics(normalizeTopics(request.topics()));
+
+        String linkedin = request.linkedinUrl() == null ? "" : request.linkedinUrl().trim();
+        if (!linkedin.isEmpty() && !linkedin.toLowerCase(Locale.ROOT).contains("linkedin.com/")) {
+            throw ApiException.badRequest("Enter a valid LinkedIn profile URL (or leave it empty)");
+        }
+        user.setLinkedinUrl(linkedin.isEmpty() ? null : linkedin);
+
+        String headline = request.headline() == null ? "" : request.headline().trim();
+        if (headline.length() > 160) {
+            throw ApiException.badRequest("Headline is too long");
+        }
+        boolean headlineChanged = !headline.equals(user.getHeadline() == null ? "" : user.getHeadline());
+        user.setHeadline(headline.isEmpty() ? null : headline);
+
+        String bio = request.bio() == null ? "" : request.bio().trim();
+        if (bio.length() > 600) {
+            throw ApiException.badRequest("Bio is too long (max 600 characters)");
+        }
+        user.setBio(bio.isEmpty() ? null : bio);
+
+        // Re-run the supply-chain relevance check when the headline is new or the
+        // member hasn't been decided yet. AI verdict → APPROVED / REJECTED; when
+        // AI is off or unsure we leave PENDING for an admin to review.
+        if (!headline.isEmpty() && (headlineChanged || "PENDING".equals(user.getVerifyStatus()))) {
+            ai.isSupplyChainRelevant(headline, linkedin).ifPresent(relevant ->
+                    user.setVerifyStatus(relevant ? "APPROVED" : "REJECTED"));
+        }
+
         return Map.of("user", Json.privateUser(users.save(user)));
+    }
+
+    /** Keeps only known topic tags, de-duplicated, as a comma-separated string. */
+    private static String normalizeTopics(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        List<String> valid = Arrays.stream(raw.split(","))
+                .map(t -> t.trim().toUpperCase(Locale.ROOT))
+                .filter(QuestionService.TAGS::contains)
+                .distinct()
+                .toList();
+        return valid.isEmpty() ? null : String.join(",", valid);
     }
 
     @GetMapping("/me")

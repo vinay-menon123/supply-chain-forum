@@ -34,6 +34,11 @@ ALTER TABLE "User" ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS organization TEXT;
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "openToMentor" BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "seekingMentor" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS topics TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "linkedinUrl" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS headline TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS bio TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "verifyStatus" TEXT NOT NULL DEFAULT 'PENDING';
 
 CREATE TABLE IF NOT EXISTS "Question" (
     id            TEXT PRIMARY KEY,
@@ -106,3 +111,18 @@ CREATE TABLE IF NOT EXISTS "EventRsvp" (
     "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "EventRsvp_eventId_userId_key" ON "EventRsvp"("eventId", "userId");
+
+CREATE TABLE IF NOT EXISTS "Listing" (
+    id            TEXT PRIMARY KEY,
+    kind          TEXT NOT NULL,
+    category      TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    description   TEXT NOT NULL,
+    location      TEXT,
+    price         TEXT,
+    size          TEXT,
+    "imageUrl"    TEXT,
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "authorId"    TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS "Listing_createdAt_idx" ON "Listing"("createdAt");

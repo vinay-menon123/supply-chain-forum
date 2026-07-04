@@ -3,8 +3,94 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import QuestionCard from "../components/QuestionCard";
-import { TAGS } from "../tags";
-import type { QuestionList } from "../types";
+import TopicPicker, { formatTopics, parseTopics } from "../components/TopicPicker";
+import { TAGS, tagMeta } from "../tags";
+import type { QuestionList, User } from "../types";
+
+function FollowTopics() {
+  const { user, updateUser } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [topics, setTopics] = useState<string[]>(parseTopics(user?.topics));
+  const [saving, setSaving] = useState(false);
+
+  if (!user) return null;
+  const followed = parseTopics(user.topics);
+
+  function toggle(value: string) {
+    setTopics((prev) =>
+      prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value]
+    );
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const data = await api<{ user: User }>("/auth/profile", {
+        method: "POST",
+        body: JSON.stringify({
+          memberType: user!.memberType,
+          headline: user!.headline ?? "",
+          linkedinUrl: user!.linkedinUrl ?? "",
+          phone: user!.phone ?? "",
+          organization: user!.organization ?? "",
+          bio: user!.bio ?? "",
+          topics: formatTopics(topics),
+          openToMentor: user!.openToMentor,
+          seekingMentor: user!.seekingMentor,
+        }),
+      });
+      updateUser(data.user);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card animate-fade-in-up mb-5 border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-violet-50/40 dark:border-indigo-950 dark:from-slate-900 dark:to-slate-900">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          🔔 Topics you follow
+        </span>
+        <button
+          onClick={() => {
+            setTopics(parseTopics(user!.topics));
+            setEditing((v) => !v);
+          }}
+          className="btn-ghost text-xs"
+        >
+          {editing ? "Cancel" : followed.length ? "Edit" : "Choose topics"}
+        </button>
+      </div>
+      {!editing && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {followed.length === 0 ? (
+            <p className="meta">
+              Follow topics to get an email when new questions are posted in them.
+            </p>
+          ) : (
+            followed.map((t) => (
+              <span
+                key={t}
+                className="badge bg-white text-indigo-700 shadow-sm dark:bg-slate-800 dark:text-indigo-300"
+              >
+                {tagMeta(t).emoji} {tagMeta(t).label}
+              </span>
+            ))
+          )}
+        </div>
+      )}
+      {editing && (
+        <div className="mt-3">
+          <TopicPicker selected={topics} onToggle={toggle} />
+          <button onClick={save} className="btn-primary mt-3 text-sm" disabled={saving}>
+            {saving ? "Saving…" : "Save topics"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Feed() {
   const { user } = useAuth();
@@ -44,7 +130,7 @@ export default function Feed() {
 
   return (
     <div>
-      <div className="animate-fade-in-up mb-6 flex items-center justify-between gap-4">
+      <div className="animate-fade-in-up mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="heading">
           {q ? `Results for "${q}"` : (
             <>
@@ -101,6 +187,8 @@ export default function Feed() {
           </button>
         ))}
       </div>
+
+      {user && !q && <FollowTopics />}
 
       {error && <p className="card text-sm text-red-600 dark:text-red-400">{error}</p>}
       {!error && !data && (

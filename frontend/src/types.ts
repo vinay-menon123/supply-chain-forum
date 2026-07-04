@@ -9,10 +9,30 @@ export interface User {
   memberType?: string | null;
   phone?: string | null;
   organization?: string | null;
+  headline?: string | null;
+  bio?: string | null;
+  linkedinUrl?: string | null;
+  verifyStatus?: "PENDING" | "APPROVED" | "REJECTED";
+  topics?: string | null;
   openToMentor?: boolean;
   seekingMentor?: boolean;
   reputation?: number;
   createdAt: string;
+}
+
+export interface Listing {
+  id: string;
+  kind: "OFFER" | "SEEK";
+  category: string;
+  title: string;
+  description: string;
+  location: string | null;
+  price: string | null;
+  size: string | null;
+  imageUrl: string | null;
+  createdAt: string;
+  authorId: string;
+  author: User;
 }
 
 export interface EventItem {

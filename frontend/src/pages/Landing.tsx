@@ -48,6 +48,37 @@ const TOGETHER = [
   { emoji: "⭐", title: "Lead", text: "Develop leaders and shape the future of supply chains." },
 ];
 
+const FEATURES = [
+  {
+    emoji: "💬",
+    title: "Ask & answer",
+    text: "Get practical answers from practitioners on demand planning, procurement, logistics and more.",
+    to: "/questions",
+    accent: "from-indigo-500 to-violet-500",
+  },
+  {
+    emoji: "🏬",
+    title: "Logistics Marketplace",
+    text: "List or find warehouse space, freight capacity, equipment and services — deal directly with members.",
+    to: "/marketplace",
+    accent: "from-emerald-500 to-teal-500",
+  },
+  {
+    emoji: "🤝",
+    title: "Find a mentor",
+    text: "Match with experienced professionals — or give back by mentoring the next generation.",
+    to: "/mentorship",
+    accent: "from-amber-500 to-orange-500",
+  },
+  {
+    emoji: "📅",
+    title: "Events & webinars",
+    text: "Join live sessions and webinars, RSVP in a tap, and never miss what matters.",
+    to: "/events",
+    accent: "from-fuchsia-500 to-pink-500",
+  },
+];
+
 export default function Landing() {
   const [questionCount, setQuestionCount] = useState(0);
   const [contributorCount, setContributorCount] = useState(0);
@@ -116,6 +147,42 @@ export default function Landing() {
               <p className="mt-3 font-bold text-slate-900 dark:text-slate-100">{type.label}</p>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{type.description}</p>
             </div>
+          ))}
+        </div>
+      </section>
+
+      {/* What you can do */}
+      <section className="relative mx-auto max-w-5xl pb-16">
+        <h2 className="animate-fade-in-up text-center text-3xl font-extrabold text-slate-900 dark:text-slate-100">
+          Everything the ecosystem needs, <span className="gradient-text">in one place</span>
+        </h2>
+        <p className="animate-fade-in-up mx-auto mt-3 max-w-2xl text-center text-sm text-slate-500 [animation-delay:80ms] dark:text-slate-400">
+          A verified, supply-chain-only community — so every conversation, connection and deal is
+          with people who actually work in the field.
+        </p>
+        <div className="mt-10 grid gap-4 sm:grid-cols-2">
+          {FEATURES.map((f, index) => (
+            <Link
+              key={f.title}
+              to={f.to}
+              className="card card-lift animate-fade-in-up group flex items-start gap-4"
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
+              <span
+                className={`grid h-12 w-12 flex-none place-items-center rounded-2xl bg-gradient-to-br ${f.accent} text-2xl shadow-sm transition-transform group-hover:scale-110`}
+              >
+                {f.emoji}
+              </span>
+              <div>
+                <p className="font-bold text-slate-900 dark:text-slate-100">
+                  {f.title}
+                  <span className="ml-1 inline-block transition-transform group-hover:translate-x-1">
+                    →
+                  </span>
+                </p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{f.text}</p>
+              </div>
+            </Link>
           ))}
         </div>
       </section>

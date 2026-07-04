@@ -1,6 +1,7 @@
 package com.cscen.forum.service;
 
 import com.cscen.forum.model.Comment;
+import com.cscen.forum.model.Listing;
 import com.cscen.forum.model.User;
 
 import java.util.LinkedHashMap;
@@ -34,18 +35,40 @@ public final class Json {
         json.put("role", user.getRole());
         json.put("memberType", user.getMemberType());
         json.put("organization", user.getOrganization());
+        json.put("headline", user.getHeadline());
+        json.put("bio", user.getBio());
+        json.put("linkedinUrl", user.getLinkedinUrl());
+        json.put("verifyStatus", user.getVerifyStatus());
         json.put("openToMentor", user.isOpenToMentor());
         json.put("seekingMentor", user.isSeekingMentor());
         json.put("createdAt", user.getCreatedAt());
         return json;
     }
 
-    /** Self view — includes contact details. */
+    /** Self view — includes contact details and notification preferences. */
     public static Map<String, Object> privateUser(User user) {
         Map<String, Object> json = publicUser(user);
         json.put("email", user.getEmail());
         json.put("phone", user.getPhone());
+        json.put("topics", user.getTopics());
         json.put("isBanned", user.isBanned());
+        return json;
+    }
+
+    public static Map<String, Object> listing(Listing listing, User author) {
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("id", listing.getId());
+        json.put("kind", listing.getKind());
+        json.put("category", listing.getCategory());
+        json.put("title", listing.getTitle());
+        json.put("description", listing.getDescription());
+        json.put("location", listing.getLocation());
+        json.put("price", listing.getPrice());
+        json.put("size", listing.getSize());
+        json.put("imageUrl", listing.getImageUrl());
+        json.put("createdAt", listing.getCreatedAt());
+        json.put("authorId", listing.getAuthorId());
+        json.put("author", author(author));
         return json;
     }
 

@@ -11,6 +11,7 @@ import com.cscen.forum.repo.VoteRepository;
 import com.cscen.forum.security.CurrentUser;
 import com.cscen.forum.service.Json;
 import com.cscen.forum.service.ModerationService;
+import com.cscen.forum.service.NotificationService;
 import com.cscen.forum.service.QuestionService;
 import com.cscen.forum.service.UploadStorage;
 import jakarta.servlet.http.HttpServletRequest;
@@ -46,12 +47,14 @@ public class QuestionController {
     private final UserRepository users;
     private final QuestionService questionService;
     private final ModerationService moderation;
+    private final NotificationService notifications;
     private final UploadStorage uploads;
     private final CurrentUser currentUser;
 
     public QuestionController(QuestionRepository questions, CommentRepository comments,
                               VoteRepository votes, UserRepository users,
                               QuestionService questionService, ModerationService moderation,
+                              NotificationService notifications,
                               UploadStorage uploads, CurrentUser currentUser) {
         this.questions = questions;
         this.comments = comments;
@@ -59,6 +62,7 @@ public class QuestionController {
         this.users = users;
         this.questionService = questionService;
         this.moderation = moderation;
+        this.notifications = notifications;
         this.uploads = uploads;
         this.currentUser = currentUser;
     }
@@ -115,6 +119,9 @@ public class QuestionController {
         question.setImageUrl(uploads.saveImage(image));
         question.setAuthorId(user.getId());
         questions.save(question);
+
+        // Email members who follow this topic (async, no-op when SMTP is off)
+        notifications.notifyNewQuestion(question, user, QuestionService.tagLabel(tag));
 
         return ResponseEntity.status(201).body(questionService.toJson(question, user.getId()));
     }

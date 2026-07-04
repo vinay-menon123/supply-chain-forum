@@ -27,6 +27,11 @@ public class User {
     private String organization;
     private boolean openToMentor = false;
     private boolean seekingMentor = false;
+    private String topics;         // comma-separated tag values the user follows
+    private String linkedinUrl;
+    private String headline;       // professional role/headline (used for verification)
+    private String bio;
+    private String verifyStatus = "PENDING"; // PENDING | APPROVED | REJECTED
 
     public static User create() {
         User user = new User();
@@ -64,4 +69,14 @@ public class User {
     public void setOpenToMentor(boolean openToMentor) { this.openToMentor = openToMentor; }
     public boolean isSeekingMentor() { return seekingMentor; }
     public void setSeekingMentor(boolean seekingMentor) { this.seekingMentor = seekingMentor; }
+    public String getTopics() { return topics; }
+    public void setTopics(String topics) { this.topics = topics; }
+    public String getLinkedinUrl() { return linkedinUrl; }
+    public void setLinkedinUrl(String linkedinUrl) { this.linkedinUrl = linkedinUrl; }
+    public String getHeadline() { return headline; }
+    public void setHeadline(String headline) { this.headline = headline; }
+    public String getBio() { return bio; }
+    public void setBio(String bio) { this.bio = bio; }
+    public String getVerifyStatus() { return verifyStatus; }
+    public void setVerifyStatus(String verifyStatus) { this.verifyStatus = verifyStatus; }
 }

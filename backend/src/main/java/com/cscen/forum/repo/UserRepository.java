@@ -27,6 +27,13 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     List<User> findByIsBannedFalse();
 
+    /** Non-banned members (other than the author) who follow a given topic tag. */
+    @Query("select u from User u where u.isBanned = false and u.id <> :authorId "
+            + "and u.topics is not null and u.topics like :like")
+    List<User> findTopicFollowers(@Param("authorId") String authorId, @Param("like") String like);
+
+    List<User> findByVerifyStatusOrderByCreatedAtDesc(String verifyStatus);
+
     @Query(value = """
             select * from (
               select u.id, u.username, u.name, u."avatarUrl", u."memberType", u.role,
