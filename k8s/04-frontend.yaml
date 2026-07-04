@@ -16,7 +16,7 @@ spec:
       containers:
         - name: frontend
           # Bump this tag on each release (mutable :latest gets stale on the nodes)
-          image: forum-frontend:v3
+          image: forum-frontend:v4
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

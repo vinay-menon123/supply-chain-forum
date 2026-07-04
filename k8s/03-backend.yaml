@@ -29,7 +29,7 @@ spec:
       containers:
         - name: backend
           # Bump this tag on each release (mutable :latest gets stale on the nodes)
-          image: forum-backend:v3
+          image: forum-backend:v4
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 4000

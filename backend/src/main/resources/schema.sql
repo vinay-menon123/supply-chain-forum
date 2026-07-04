@@ -15,6 +15,15 @@ CREATE TABLE IF NOT EXISTS "User" (
     "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Databases created by older app versions may be missing these columns
+-- entirely — add them before altering, so every starting point migrates
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "googleId" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "avatarUrl" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'USER';
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "flagCount" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "isBanned" BOOLEAN NOT NULL DEFAULT false;
+
 -- Prisma created role as a Postgres enum; convert to plain text
 ALTER TABLE "User" ALTER COLUMN role TYPE TEXT USING role::text;
 ALTER TABLE "User" ALTER COLUMN role SET DEFAULT 'USER';
@@ -49,6 +58,7 @@ CREATE TABLE IF NOT EXISTS "Comment" (
     "questionId"  TEXT NOT NULL REFERENCES "Question"(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS "Comment_questionId_idx" ON "Comment"("questionId");
+ALTER TABLE "Comment" ADD COLUMN IF NOT EXISTS "imageUrl" TEXT;
 
 CREATE TABLE IF NOT EXISTS "Vote" (
     id            TEXT PRIMARY KEY,
