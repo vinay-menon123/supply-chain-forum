@@ -42,4 +42,32 @@
   .pill-inactive {
     @apply text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800;
   }
+  /* Animated gradient headline text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 bg-clip-text text-transparent;
+    background-size: 200% 200%;
+    animation: gradient-x 6s ease infinite;
+  }
+  /* Blurred floating orb for hero backgrounds */
+  .blob {
+    @apply pointer-events-none absolute rounded-full blur-3xl;
+  }
+  /* Card that lifts and glows on hover */
+  .card-lift {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10;
+  }
+}
+
+@keyframes gradient-x {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -2,14 +2,20 @@ import { ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
 import Navbar from "./components/Navbar";
+import { Link } from "react-router-dom";
 import Admin from "./pages/Admin";
 import Ask from "./pages/Ask";
+import Events from "./pages/Events";
 import Feed from "./pages/Feed";
+import Landing from "./pages/Landing";
+import Leaderboard from "./pages/Leaderboard";
 import Login from "./pages/Login";
+import Mentorship from "./pages/Mentorship";
 import Messages from "./pages/Messages";
 import MessageThread from "./pages/MessageThread";
 import Profile from "./pages/Profile";
 import QuestionDetail from "./pages/QuestionDetail";
+import Welcome from "./pages/Welcome";
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -25,7 +31,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
@@ -36,11 +42,35 @@ export default function App() {
           posting is disabled.
         </div>
       )}
+      {user && !user.memberType && (
+        <div className="border-b border-indigo-200 bg-indigo-50 px-4 py-2 text-center text-sm text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-300">
+          👋 Finish setting up your profile —{" "}
+          <Link to="/welcome" className="font-semibold underline">
+            choose how you participate
+          </Link>{" "}
+          in the ecosystem.
+        </div>
+      )}
       <main className="mx-auto max-w-3xl px-4 py-8">
         <Routes>
-          <Route path="/" element={<Feed />} />
+          <Route
+            path="/"
+            element={user ? <Feed /> : loading ? <div className="py-16" /> : <Landing />}
+          />
+          <Route path="/questions" element={<Feed />} />
           <Route path="/questions/:id" element={<QuestionDetail />} />
           <Route path="/users/:username" element={<Profile />} />
+          <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/events" element={<Events />} />
+          <Route path="/mentorship" element={<Mentorship />} />
+          <Route
+            path="/welcome"
+            element={
+              <RequireAuth>
+                <Welcome />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/ask"
             element={

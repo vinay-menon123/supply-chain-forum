@@ -4,6 +4,7 @@ import { api, apiForm } from "../api";
 import { useAuth } from "../auth";
 import ShareButton from "../components/ShareButton";
 import VoteButton from "../components/VoteButton";
+import { tagMeta } from "../tags";
 import { timeAgo } from "../time";
 import type { Comment, Question } from "../types";
 
@@ -77,6 +78,18 @@ export default function QuestionDetail() {
     }
   }
 
+  async function toggleAccept(commentId: string) {
+    try {
+      const data = await api<{ acceptedCommentId: string | null }>(
+        `/questions/${id}/comments/${commentId}/accept`,
+        { method: "POST" }
+      );
+      setQuestion((prev) => (prev ? { ...prev, acceptedCommentId: data.acceptedCommentId } : prev));
+    } catch (err) {
+      setCommentError(err instanceof Error ? err.message : "Failed to update accepted answer");
+    }
+  }
+
   async function deleteComment(commentId: string) {
     if (!window.confirm("Delete this comment?")) return;
     try {
@@ -108,8 +121,12 @@ export default function QuestionDetail() {
     return <p className="py-8 text-center text-slate-500 dark:text-slate-400">Loading…</p>;
   }
 
-  const comments = question.comments ?? [];
+  const acceptedId = question.acceptedCommentId;
+  const comments = [...(question.comments ?? [])].sort((a, b) =>
+    a.id === acceptedId ? -1 : b.id === acceptedId ? 1 : 0
+  );
   const canDeleteQuestion = user && (user.id === question.author.id || isAdmin);
+  const canAccept = user && (user.id === question.author.id || isAdmin);
 
   return (
     <div className="space-y-6">
@@ -120,6 +137,16 @@ export default function QuestionDetail() {
             <button onClick={deleteQuestion} className="btn-danger flex-none" title="Delete question">
               🗑 Delete
             </button>
+          )}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {tagMeta(question.tag).emoji} {tagMeta(question.tag).label}
+          </span>
+          {acceptedId && (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+              ✓ Answered
+            </span>
           )}
         </div>
         <div className="meta mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -151,21 +178,48 @@ export default function QuestionDetail() {
 
         <div className="space-y-3">
           {comments.map((comment) => (
-            <div key={comment.id} className="card py-4">
+            <div
+              key={comment.id}
+              className={`card py-4 ${
+                comment.id === acceptedId
+                  ? "border-emerald-400 ring-1 ring-emerald-300 dark:border-emerald-700 dark:ring-emerald-800"
+                  : ""
+              }`}
+            >
+              {comment.id === acceptedId && (
+                <p className="mb-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  ✓ Accepted Answer
+                </p>
+              )}
               <div className="meta mb-1 flex items-center gap-3">
                 <Link to={`/users/${comment.author.username}`} className="username-link">
                   @{comment.author.username}
                 </Link>
                 <span>{timeAgo(comment.createdAt)}</span>
-                {user && (user.id === comment.author.id || isAdmin) && (
-                  <button
-                    onClick={() => deleteComment(comment.id)}
-                    className="btn-danger ml-auto"
-                    title="Delete comment"
-                  >
-                    🗑
-                  </button>
-                )}
+                <span className="ml-auto flex items-center gap-2">
+                  {canAccept && (
+                    <button
+                      onClick={() => toggleAccept(comment.id)}
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium transition ${
+                        comment.id === acceptedId
+                          ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-300"
+                          : "text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950"
+                      }`}
+                      title={comment.id === acceptedId ? "Unmark accepted answer" : "Mark as accepted answer"}
+                    >
+                      {comment.id === acceptedId ? "✓ Accepted" : "✓ Accept"}
+                    </button>
+                  )}
+                  {user && (user.id === comment.author.id || isAdmin) && (
+                    <button
+                      onClick={() => deleteComment(comment.id)}
+                      className="btn-danger"
+                      title="Delete comment"
+                    >
+                      🗑
+                    </button>
+                  )}
+                </span>
               </div>
               <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
                 {comment.body}

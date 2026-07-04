@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import MemberTypeBadge from "../components/MemberTypeBadge";
 import QuestionCard from "../components/QuestionCard";
 import type { Profile as ProfileData } from "../types";
 
@@ -87,6 +88,7 @@ export default function Profile() {
               <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
                 {user.name || `@${user.username}`}
               </h1>
+              <MemberTypeBadge memberType={user.memberType} />
               {user.role === "ADMIN" && (
                 <span className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-2 py-0.5 text-xs font-bold text-white shadow-sm">
                   🛡️ ADMIN
@@ -94,18 +96,29 @@ export default function Profile() {
               )}
             </div>
             {user.name && <p className="meta">@{user.username}</p>}
-            <p className="meta mt-1">Member since {joined}</p>
+            <p className="meta mt-1">
+              {user.organization ? `${user.organization} · ` : ""}Member since {joined}
+            </p>
           </div>
-          {viewer && !isSelf && (
-            <Link to={`/messages/${user.username}`} className="btn-primary">
-              💬 Message
-            </Link>
-          )}
+          <div className="flex flex-col items-end gap-2">
+            <div className="text-right">
+              <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                {user.reputation ?? 0}
+              </div>
+              <div className="meta">reputation</div>
+            </div>
+            {viewer && !isSelf && (
+              <Link to={`/messages/${user.username}`} className="btn-primary">
+                💬 Message
+              </Link>
+            )}
+          </div>
         </div>
-        <div className="mt-5 grid grid-cols-3 gap-4 rounded-lg bg-slate-50 p-4 dark:bg-slate-800/50">
+        <div className="mt-5 grid grid-cols-2 gap-4 rounded-lg bg-slate-50 p-4 dark:bg-slate-800/50 sm:grid-cols-4">
           <Stat value={stats.questions} label="Questions" />
           <Stat value={stats.comments} label="Comments" />
           <Stat value={stats.upvotesReceived} label="Upvotes received" />
+          <Stat value={stats.accepted} label="Accepted answers" />
         </div>
       </div>
 

@@ -6,14 +6,38 @@ export interface User {
   avatarUrl?: string | null;
   role?: "USER" | "ADMIN";
   isBanned?: boolean;
+  memberType?: string | null;
+  phone?: string | null;
+  organization?: string | null;
+  openToMentor?: boolean;
+  seekingMentor?: boolean;
+  reputation?: number;
   createdAt: string;
+}
+
+export interface EventItem {
+  id: string;
+  title: string;
+  description: string;
+  link: string | null;
+  startsAt: string;
+  createdAt: string;
+  host: User;
+  rsvpCount: number;
+  viewerRsvped: boolean;
 }
 
 export interface Profile {
   user: User;
-  stats: { questions: number; comments: number; upvotesReceived: number };
+  stats: { questions: number; comments: number; upvotesReceived: number; accepted: number };
   questions: Question[];
   commented: Question[];
+}
+
+export interface Leader {
+  user: User;
+  stats: { questions: number; comments: number; upvotesReceived: number; accepted: number };
+  reputation: number;
 }
 
 export interface ChatMessage {
@@ -56,6 +80,8 @@ export interface Question {
   shareCount: number;
   voteCount: number;
   viewerHasVoted: boolean;
+  tag: string;
+  acceptedCommentId: string | null;
   createdAt: string;
   author: User;
   comments?: Comment[];

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { MEMBER_TYPES } from "../memberTypes";
 import type { User } from "../types";
 
 declare global {
@@ -72,7 +73,12 @@ export default function Login() {
                 body: JSON.stringify({ credential: response.credential }),
               });
               login(data.token, data.user);
-              navigate(from, { replace: true });
+              // First sign-in: pick a member type before landing anywhere else
+              if (!data.user.memberType) {
+                navigate("/welcome", { replace: true, state: { from } });
+              } else {
+                navigate(from, { replace: true });
+              }
             } catch (err) {
               setError(err instanceof Error ? err.message : "Sign-in failed");
             }
@@ -98,12 +104,19 @@ export default function Login() {
   }, [from, login, navigate]);
 
   return (
-    <div className="mx-auto max-w-md">
-      <h1 className="heading mb-2 text-center">Welcome</h1>
-      <p className="mb-6 text-center text-sm text-slate-600 dark:text-slate-400">
-        Sign in with Google — we use your verified Google email, so no passwords to remember.
+    <div className="relative mx-auto max-w-2xl">
+      <div className="blob left-[-10rem] top-[-4rem] h-72 w-72 animate-float bg-indigo-500/25 dark:bg-indigo-600/15" />
+      <div className="blob right-[-8rem] top-32 h-80 w-80 animate-float-slow bg-fuchsia-500/20 dark:bg-fuchsia-600/10" />
+
+      <h1 className="heading animate-fade-in-up mb-1 text-center">
+        Welcome to <span className="gradient-text">CSCE Nexus</span>
+      </h1>
+      <p className="animate-fade-in-up mb-6 text-center text-sm text-slate-600 [animation-delay:100ms] dark:text-slate-400">
+        The collaborative platform for the supply chain ecosystem — sign in with your verified
+        Google account to connect, contribute and lead.
       </p>
-      <div className="card flex flex-col items-center gap-4 py-8">
+
+      <div className="card animate-fade-in-up relative mb-6 flex flex-col items-center gap-4 py-8 [animation-delay:200ms]">
         {status === "loading" && (
           <p className="text-sm text-slate-500 dark:text-slate-400">Loading sign-in…</p>
         )}
@@ -128,6 +141,27 @@ export default function Login() {
         <div ref={buttonRef} className={status === "ready" ? "" : "hidden"} />
         {error && <p className="px-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
       </div>
+
+      <h2 className="animate-fade-in-up mb-3 text-center text-sm font-semibold uppercase tracking-wide text-slate-500 [animation-delay:300ms] dark:text-slate-400">
+        One ecosystem, six ways to participate
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {MEMBER_TYPES.map((type, index) => (
+          <div
+            key={type.value}
+            className="card card-lift animate-fade-in-up py-4"
+            style={{ animationDelay: `${350 + index * 100}ms` }}
+          >
+            <p className="font-semibold text-slate-900 dark:text-slate-100">
+              {type.emoji} {type.label}
+            </p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{type.description}</p>
+          </div>
+        ))}
+      </div>
+      <p className="animate-fade-in mt-6 text-center text-xs font-medium text-slate-400 [animation-delay:900ms] dark:text-slate-500">
+        One Mission. One Ecosystem. <span className="gradient-text font-bold">Limitless Impact.</span>
+      </p>
     </div>
   );
 }

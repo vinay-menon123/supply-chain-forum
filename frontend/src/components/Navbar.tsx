@@ -54,14 +54,35 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur transition-colors dark:border-slate-800 dark:bg-slate-950/90">
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
-        <Link to="/" className="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100">
-          <span className="rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 px-2 py-1 text-sm text-white shadow-sm">
-            SCF
+        <Link to="/" className="group flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100">
+          <span className="rounded-md bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 bg-[length:200%_200%] px-2 py-1 text-sm text-white shadow-sm transition-shadow animate-gradient-x group-hover:shadow-lg group-hover:shadow-indigo-500/40">
+            CSCEN
           </span>
-          <span className="hidden sm:inline">Supply Chain Forum</span>
+          <span className="hidden sm:inline">CSCE Nexus</span>
         </Link>
         <nav className="flex items-center gap-1.5">
           <ThemeToggle />
+          <Link
+            to="/leaderboard"
+            title="Leaderboard"
+            className="rounded-full p-2 text-lg transition hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            🏆
+          </Link>
+          <Link
+            to="/events"
+            title="Events & webinars"
+            className="rounded-full p-2 text-lg transition hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            📅
+          </Link>
+          <Link
+            to="/mentorship"
+            title="Mentorship"
+            className="rounded-full p-2 text-lg transition hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            🤝
+          </Link>
           {user ? (
             <>
               <Link

@@ -26,6 +26,16 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       # Comma-separated emails that get the ADMIN role on sign-in
       ADMIN_EMAILS: ${ADMIN_EMAILS:-vinay.menon2707@gmail.com}
+      # Optional: AI content moderation via the Claude API (wordlist-only when unset)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-8}
+      # Optional: weekly digest emails (disabled when SMTP_HOST unset)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@cscen.local}
+      APP_URL: ${APP_URL:-http://localhost:3000}
       PORT: "4000"
     volumes:
       - uploads:/app/uploads

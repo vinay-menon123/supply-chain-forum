@@ -29,7 +29,7 @@ spec:
       containers:
         - name: backend
           # Bump this tag on each release (mutable :latest gets stale on the nodes)
-          image: forum-backend:v2
+          image: forum-backend:v3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 4000
@@ -56,6 +56,28 @@ spec:
                 secretKeyRef:
                   name: forum-secrets
                   key: ADMIN_EMAILS
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: forum-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: forum-secrets
+                  key: SMTP_HOST
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: forum-secrets
+                  key: SMTP_USER
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: forum-secrets
+                  key: SMTP_PASS
+            - name: APP_URL
+              value: "http://localhost:8080"
           volumeMounts:
             - name: uploads
               mountPath: /app/uploads

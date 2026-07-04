@@ -1,5 +1,4 @@
-node_modules
-dist
+target
 uploads
 .env
 *.md

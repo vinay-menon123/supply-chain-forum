@@ -1,13 +1,15 @@
-# Supply Chain Forum
+# CSCE Nexus — Supply Chain Community Forum
 
-A Stack Overflow / Quora–style forum: users sign up, ask questions (text + optional image), comment on them, and share links.
+The collaborative Q&A platform for the supply chain ecosystem (CSCEN): academicians,
+professionals, researchers, students, industry partners, and startups ask questions,
+share knowledge, chat, and build reputation.
 
 ## Tech Stack
 
 | Layer     | Tech                                                        |
 | --------- | ----------------------------------------------------------- |
 | Frontend  | React 18, TypeScript, Vite, Tailwind CSS, React Router      |
-| Backend   | Node.js 22, Express, TypeScript, Prisma ORM, Zod, Multer    |
+| Backend   | Java 21, Spring Boot 3, Spring Data JPA, Maven              |
 | Database  | PostgreSQL 16                                               |
 | Auth      | Google Sign-In (verified emails) + JWT Bearer sessions      |
 | Deploy    | Docker (multi-stage builds), docker-compose, Kubernetes     |
@@ -37,16 +39,19 @@ shows a setup notice.
 ## Project Structure
 
 ```
-├── backend/            Express REST API
-│   ├── prisma/         Prisma schema (User, Question, Comment)
-│   ├── src/
-│   │   ├── routes/     auth.ts, questions.ts
-│   │   ├── middleware/ JWT auth middleware
-│   │   └── upload.ts   Multer image upload config
+├── backend/            Spring Boot REST API (Java 21)
+│   ├── src/main/java/com/cscen/forum/
+│   │   ├── web/        Controllers (auth, questions, users, messages, admin, leaderboard)
+│   │   ├── service/    Moderation, uploads, DTO assembly
+│   │   ├── security/   JWT + current-user resolution
+│   │   ├── model/      JPA entities
+│   │   └── repo/       Spring Data repositories
+│   ├── src/main/resources/schema.sql   Idempotent schema (upgrades Prisma-era DBs in place)
 │   └── Dockerfile
 ├── frontend/           React SPA (served by nginx in prod, proxies /api → backend)
-│   ├── src/pages/      Feed, QuestionDetail, Ask, Login, Register
+│   ├── src/pages/      Feed, QuestionDetail, Ask, Profile, Messages, Leaderboard, Admin, Welcome
 │   └── Dockerfile
+├── Dockerfile          All-in-one image (Railway): Spring Boot serves the built SPA
 ├── docker-compose.yml  One-command local stack
 └── k8s/                Kubernetes manifests for Docker Desktop
 ```
@@ -80,7 +85,7 @@ Tear down with `kubectl delete namespace forum`.
 
 ## Deploy to Railway (~$5/mo Hobby plan)
 
-The root [Dockerfile](Dockerfile) builds an all-in-one image (Express serves the
+The root [Dockerfile](Dockerfile) builds an all-in-one image (Spring Boot serves the
 frontend build directly), so Railway needs just **one service + Postgres + a volume**:
 
 1. Push this repo to GitHub, then in [Railway](https://railway.com): **New Project → Deploy from GitHub repo**. Railway auto-detects the root Dockerfile.
@@ -101,12 +106,9 @@ Every `git push` then redeploys automatically. (No GitHub? `npm i -g @railway/cl
 # 1. Start just the database
 docker compose up -d db
 
-# 2. Backend (http://localhost:4000)
+# 2. Backend (http://localhost:4000) — needs JDK 21+ and Maven
 cd backend
-copy .env.example .env
-npm install
-npx prisma db push
-npm run dev
+mvn spring-boot:run   # reads DATABASE_URL etc. from the environment; schema.sql runs on boot
 
 # 3. Frontend (http://localhost:5173, proxies /api to :4000)
 cd frontend
@@ -120,10 +122,13 @@ npm run dev
 | ------ | ----------------------------- | ---- | ------------------------------------ |
 | GET    | `/api/auth/config`            | –    | Runtime config → `{ googleClientId }` |
 | POST   | `/api/auth/google`            | –    | Verify Google ID token → `{ token, user }` |
+| POST   | `/api/auth/profile`           | ✅   | Onboarding: member type + optional phone/organization |
 | GET    | `/api/auth/me`                | ✅   | Current user                         |
-| GET    | `/api/questions?q=&page=`     | –    | List/search questions (paginated; includes voteCount/viewerHasVoted) |
-| POST   | `/api/questions`              | ✅   | Ask question (`multipart/form-data`: title, body, image?) |
+| GET    | `/api/questions?q=&page=&sort=&tag=` | – | List/search questions (paginated; includes voteCount/viewerHasVoted) |
+| POST   | `/api/questions`              | ✅   | Ask question (`multipart/form-data`: title, body, tag, image?) |
 | GET    | `/api/questions/:id`          | –    | Question detail with comments        |
+| POST   | `/api/questions/:id/comments/:commentId/accept` | ✅ | Toggle accepted answer (author/admin) |
+| GET    | `/api/leaderboard`            | –    | Top contributors by reputation       |
 | POST   | `/api/questions/:id/vote`     | ✅   | Toggle upvote → `{ voteCount, viewerHasVoted }` |
 | POST   | `/api/questions/:id/comments` | ✅   | Add a comment (`multipart/form-data`: body, image?) |
 | DELETE | `/api/questions/:id`          | ✅   | Delete question (author or admin)    |
@@ -143,16 +148,24 @@ Authenticated requests send `Authorization: Bearer <token>`.
 ## Features
 
 - **Authentication** — Google Sign-In only (emails are verified by Google), JWT sessions (7-day expiry)
-- **Questions** — title + rich text body + optional image upload (JPEG/PNG/GIF/WebP, ≤ 5 MB), stored on a persistent volume
-- **Upvotes** — one vote per user per question, click again to remove; feed sortable by Newest / Top
+- **Member types** — first sign-in onboarding: Academician 🎓, Professional 💼, Researcher 🔍, Student 📚, Industry Partner 🏭, or Startup & Tech Partner 🚀, plus optional phone and organization. Badges shown across the app
+- **Questions** — title + body + supply chain topic tag (Demand Planning, Procurement, Logistics, Digital & AI, …) + optional image (≤ 5 MB)
+- **Topic filtering** — feed filter chips per domain, plus Newest / Top sort and full-text search
+- **Accepted answers** — the question author (or an admin) marks the answer that solved it; highlighted and pinned on top
+- **Upvotes** — one vote per user per question, click again to remove
+- **Reputation & leaderboard** — 10 pts per upvote received, 15 per accepted answer, 5 per question, 2 per comment; top contributors at `/leaderboard`
 - **Comments** — discussion under each question, with optional image attachments
 - **Share** — native share sheet where available, clipboard fallback, with a share counter
-- **Search** — case-insensitive search across titles and bodies
 - **Dark mode** — toggle in the navbar, follows system preference by default
-- **User profiles** — click any username: avatar, stats (questions / comments / upvotes received), their posts, and a Message button
+- **User profiles** — stats, reputation, member badge, their posts + posts they commented on, and a Message button
 - **Direct messages** — 1:1 chat with unread badges (polling-based)
 - **Moderation** — profanity is auto-removed before it's stored; authors are flagged, and accounts auto-suspend after 5 flags. Question/comment deletion by the author or an admin
+- **AI moderation (optional)** — set `ANTHROPIC_API_KEY` and a Claude classifier reviews posts the wordlist can't catch; fails open so posting never breaks
 - **Admin role** — emails listed in `ADMIN_EMAILS` become admins on sign-in and get a moderation dashboard (`/admin`) to review flags and ban/unban
+- **Events & webinars** — admins publish events at `/events`; members RSVP with one click
+- **Mentorship match** — members opt in as mentor 🎓 or mentee 🌱 during onboarding and find each other at `/mentorship`, connecting via DMs
+- **Weekly digest** — top questions of the week emailed every Monday (requires SMTP config; test via `POST /api/admin/digest/test`)
+- **Animated landing page** — gradient hero, floating orbs, live counters, and staggered reveals greet signed-out visitors
 
 ## Environment variables (backend)
 
@@ -163,4 +176,8 @@ Authenticated requests send `Authorization: Bearer <token>`.
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 Web Client ID for Google Sign-In |
 | `ADMIN_EMAILS` | Comma-separated emails granted the ADMIN role on sign-in |
 | `MODERATION_BAN_THRESHOLD` | Flags before auto-suspension (default 5) |
+| `ANTHROPIC_API_KEY` | Optional — enables AI content moderation via the Claude API (wordlist-only when unset) |
+| `ANTHROPIC_MODEL` | Moderation model (default `claude-opus-4-8`; set `claude-haiku-4-5` for cheaper/faster) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Optional — enables the Monday-morning weekly digest email |
+| `APP_URL` | Public URL used in digest links (e.g. your Railway domain) |
 | `PORT` | Listen port (default 4000) |

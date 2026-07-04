@@ -1,4 +1,4 @@
-# All-in-one image: backend API + built frontend served by Express.
+# All-in-one image: Spring Boot API + built frontend served from ./public.
 # Used by Railway (and any single-container host). Local docker-compose and
 # the k8s manifests use backend/Dockerfile + frontend/Dockerfile instead.
 
@@ -11,27 +11,18 @@ COPY frontend/ .
 RUN npm run build
 
 # ---- Backend build ----
-FROM node:22-slim AS backend
-RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+FROM maven:3.9-eclipse-temurin-21 AS backend
 WORKDIR /app
-COPY backend/package*.json ./
-RUN npm ci
-COPY backend/prisma ./prisma
-RUN npx prisma generate
-COPY backend/tsconfig.json ./
+COPY backend/pom.xml ./
+RUN mvn -q -B dependency:go-offline
 COPY backend/src ./src
-RUN npm run build && npm prune --omit=dev
+RUN mvn -q -B -DskipTests package
 
 # ---- Runtime ----
-FROM node:22-slim
-RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+FROM eclipse-temurin:21-jre
 WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=backend /app/node_modules ./node_modules
-COPY --from=backend /app/dist ./dist
-COPY --from=backend /app/prisma ./prisma
-COPY backend/package.json ./
+COPY --from=backend /app/target/forum-backend-1.0.0.jar app.jar
 COPY --from=frontend /fe/dist ./public
 
 EXPOSE 4000
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && node dist/index.js"]
+CMD ["java", "-jar", "app.jar"]

@@ -1,12 +1,14 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiForm } from "../api";
+import { TAGS } from "../tags";
 import type { Question } from "../types";
 
 export default function Ask() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [tag, setTag] = useState("GENERAL");
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [error, setError] = useState("");
@@ -34,6 +36,7 @@ export default function Ask() {
       const form = new FormData();
       form.append("title", title);
       form.append("body", body);
+      form.append("tag", tag);
       if (image) form.append("image", image);
       const question = await apiForm<Question>("/questions", form);
       navigate(`/questions/${question.id}`);
@@ -61,6 +64,19 @@ export default function Ask() {
             minLength={8}
             maxLength={200}
           />
+        </div>
+
+        <div>
+          <label className="label" htmlFor="tag">
+            Topic
+          </label>
+          <select id="tag" className="input" value={tag} onChange={(e) => setTag(e.target.value)}>
+            {TAGS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.emoji} {t.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>
