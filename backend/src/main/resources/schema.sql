@@ -39,6 +39,13 @@ ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "linkedinUrl" TEXT;
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS headline TEXT;
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS bio TEXT;
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "verifyStatus" TEXT NOT NULL DEFAULT 'PENDING';
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "firstName" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastName" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "position" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "passwordHash" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "notifyAllQuestions" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'FREE';
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "planExpiresAt" TIMESTAMP(3);
 
 CREATE TABLE IF NOT EXISTS "Question" (
     id            TEXT PRIMARY KEY,
@@ -126,3 +133,23 @@ CREATE TABLE IF NOT EXISTS "Listing" (
     "authorId"    TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS "Listing_createdAt_idx" ON "Listing"("createdAt");
+
+-- Marketplace monetization: leads (buyer→seller contacts). Free tier is capped;
+-- PRO lifts the cap and reveals lead details to sellers.
+CREATE TABLE IF NOT EXISTS "MarketplaceLead" (
+    id            TEXT PRIMARY KEY,
+    "listingId"   TEXT NOT NULL REFERENCES "Listing"(id) ON DELETE CASCADE,
+    "sellerId"    TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
+    "buyerId"     TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS "MarketplaceLead_buyerId_createdAt_idx" ON "MarketplaceLead"("buyerId", "createdAt");
+CREATE INDEX IF NOT EXISTS "MarketplaceLead_sellerId_idx" ON "MarketplaceLead"("sellerId");
+CREATE UNIQUE INDEX IF NOT EXISTS "MarketplaceLead_listingId_buyerId_key" ON "MarketplaceLead"("listingId", "buyerId");
+
+-- Answer Upvotes & Nested Commenting Upgrades
+ALTER TABLE "Comment" ADD COLUMN IF NOT EXISTS "parentId" TEXT REFERENCES "Comment"(id) ON DELETE CASCADE;
+ALTER TABLE "Vote" ALTER COLUMN "questionId" DROP NOT NULL;
+ALTER TABLE "Vote" ADD COLUMN IF NOT EXISTS "commentId" TEXT REFERENCES "Comment"(id) ON DELETE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS "Vote_userId_commentId_key" ON "Vote"("userId", "commentId");
+

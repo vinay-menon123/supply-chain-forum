@@ -16,12 +16,21 @@ public class Vote {
     private Instant createdAt = Instant.now();
     private String userId;
     private String questionId;
+    private String commentId;
 
     public static Vote create(String userId, String questionId) {
         Vote vote = new Vote();
         vote.id = UUID.randomUUID().toString();
         vote.userId = userId;
         vote.questionId = questionId;
+        return vote;
+    }
+
+    public static Vote createCommentVote(String userId, String commentId) {
+        Vote vote = new Vote();
+        vote.id = UUID.randomUUID().toString();
+        vote.userId = userId;
+        vote.commentId = commentId;
         return vote;
     }
 
@@ -33,4 +42,6 @@ public class Vote {
     public void setUserId(String userId) { this.userId = userId; }
     public String getQuestionId() { return questionId; }
     public void setQuestionId(String questionId) { this.questionId = questionId; }
+    public String getCommentId() { return commentId; }
+    public void setCommentId(String commentId) { this.commentId = commentId; }
 }

@@ -22,6 +22,7 @@ public final class Json {
         json.put("username", user.getUsername());
         json.put("avatarUrl", user.getAvatarUrl());
         json.put("memberType", user.getMemberType());
+        json.put("pro", user.isPro());
         return json;
     }
 
@@ -41,6 +42,8 @@ public final class Json {
         json.put("verifyStatus", user.getVerifyStatus());
         json.put("openToMentor", user.isOpenToMentor());
         json.put("seekingMentor", user.isSeekingMentor());
+        json.put("plan", user.getPlan());
+        json.put("pro", user.isPro());
         json.put("createdAt", user.getCreatedAt());
         return json;
     }
@@ -51,6 +54,8 @@ public final class Json {
         json.put("email", user.getEmail());
         json.put("phone", user.getPhone());
         json.put("topics", user.getTopics());
+        json.put("notifyAllQuestions", user.isNotifyAllQuestions());
+        json.put("planExpiresAt", user.getPlanExpiresAt());
         json.put("isBanned", user.isBanned());
         return json;
     }
@@ -73,6 +78,10 @@ public final class Json {
     }
 
     public static Map<String, Object> comment(Comment comment, User author) {
+        return comment(comment, author, 0L, false);
+    }
+
+    public static Map<String, Object> comment(Comment comment, User author, long voteCount, boolean viewerHasVoted) {
         Map<String, Object> json = new LinkedHashMap<>();
         json.put("id", comment.getId());
         json.put("body", comment.getBody());
@@ -80,7 +89,10 @@ public final class Json {
         json.put("createdAt", comment.getCreatedAt());
         json.put("authorId", comment.getAuthorId());
         json.put("questionId", comment.getQuestionId());
+        json.put("parentId", comment.getParentId());
         json.put("author", author(author));
+        json.put("voteCount", voteCount);
+        json.put("viewerHasVoted", viewerHasVoted);
         return json;
     }
 }

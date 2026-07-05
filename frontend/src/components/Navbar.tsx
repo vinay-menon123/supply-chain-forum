@@ -2,33 +2,18 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { isDark, setTheme } from "../theme";
+import { startVisibilityInterval } from "../poll";
 
-function ThemeToggle({ className = "" }: { className?: string }) {
-  const [dark, setDark] = useState(isDark());
-
-  function toggle() {
-    setTheme(!dark);
-    setDark(!dark);
-  }
-
-  return (
-    <button
-      onClick={toggle}
-      title={dark ? "Switch to light mode" : "Switch to dark mode"}
-      className={`rounded-full p-2 text-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 ${className}`}
-    >
-      {dark ? "☀️" : "🌙"}
-    </button>
-  );
-}
-
-const NAV_LINKS = [
-  { to: "/", emoji: "🧭", label: "Feed" },
-  { to: "/leaderboard", emoji: "🏆", label: "Leaderboard" },
-  { to: "/events", emoji: "📅", label: "Events" },
-  { to: "/mentorship", emoji: "🤝", label: "Mentorship" },
-  { to: "/marketplace", emoji: "🏬", label: "Marketplace" },
+// Primary destinations sit inline; the rest fold into a "Community" dropdown.
+const PRIMARY = [
+  { to: "/", label: "Feed" },
+  { to: "/ask", label: "Ask" },
+  { to: "/marketplace", label: "Marketplace" },
+];
+const COMMUNITY = [
+  { to: "/leaderboard", label: "🏆 Leaderboard" },
+  { to: "/events", label: "📅 Events" },
+  { to: "/mentorship", label: "🤝 Mentorship" },
 ];
 
 export default function Navbar() {
@@ -37,6 +22,7 @@ export default function Navbar() {
   const location = useLocation();
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dropdown, setDropdown] = useState<null | "community" | "account">(null);
 
   useEffect(() => {
     if (!user) {
@@ -49,105 +35,181 @@ export default function Navbar() {
         .then((data) => active && setUnread(data.count))
         .catch(() => {});
     load();
-    const timer = setInterval(load, 20000);
+    // Poll while the tab is visible; pause when backgrounded (see poll.ts).
+    const stop = startVisibilityInterval(load, 20000);
     return () => {
       active = false;
-      clearInterval(timer);
+      stop();
     };
   }, [user]);
 
-  // Close the mobile menu whenever the route changes
+  // Close menus whenever the route changes
   useEffect(() => {
     setMenuOpen(false);
+    setDropdown(null);
   }, [location.pathname]);
 
   function handleLogout() {
     logout();
     setMenuOpen(false);
+    setDropdown(null);
     navigate("/");
   }
 
-  const iconLink = "rounded-full p-2 text-lg transition hover:bg-slate-100 dark:hover:bg-slate-800";
+  const isActive = (to: string) =>
+    location.pathname === to || (to !== "/" && location.pathname.startsWith(to));
+
+  const navLinkClass = (to: string) =>
+    `text-sm font-medium tracking-wide transition-all duration-200 ${
+      isActive(to) ? "text-white" : "text-[#8A8F98] hover:text-white"
+    }`;
+
+  const communityActive = COMMUNITY.some((l) => isActive(l.to));
 
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/80 backdrop-blur-md transition-colors dark:border-slate-800/70 dark:bg-slate-950/80">
-      <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+    <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-bg-base/70 backdrop-blur-xl text-foreground font-sans">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-6 py-4">
+        {/* Brand */}
         <Link
-          to="/"
-          className="group flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100"
+          to="/landing"
+          className="group flex flex-none items-center gap-2 font-bold tracking-tight text-white"
         >
-          <span className="rounded-lg bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 bg-[length:200%_200%] px-2 py-1 text-sm text-white shadow-sm transition-shadow animate-gradient-x group-hover:shadow-lg group-hover:shadow-indigo-500/40">
+          <span className="rounded bg-accent px-2 py-1 text-xs text-white shadow-[0_0_12px_rgba(94,106,210,0.4)]">
             CSCEN
           </span>
-          <span className="hidden sm:inline">CSCE Nexus</span>
+          <span className="hidden whitespace-nowrap text-sm font-semibold tracking-wide xl:inline">
+            CSCE Nexus
+          </span>
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 lg:flex">
-          <ThemeToggle />
-          {NAV_LINKS.slice(1).map((l) => (
-            <Link key={l.to} to={l.to} title={l.label} className={iconLink}>
-              {l.emoji}
+        <nav className="hidden items-center gap-5 lg:flex">
+          {PRIMARY.map((l) => (
+            <Link key={l.to} to={l.to} className={navLinkClass(l.to)}>
+              {l.label}
             </Link>
           ))}
+
+          {/* Community dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setDropdown((d) => (d === "community" ? null : "community"))}
+              className={`flex items-center gap-1 text-sm font-medium tracking-wide transition-all duration-200 ${
+                communityActive || dropdown === "community" ? "text-white" : "text-[#8A8F98] hover:text-white"
+              }`}
+            >
+              Community
+              <svg className={`h-3 w-3 transition-transform ${dropdown === "community" ? "rotate-180" : ""}`} viewBox="0 0 12 12" fill="none">
+                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {dropdown === "community" && (
+              <div className="absolute left-0 top-full z-50 mt-2 w-44 rounded-xl border border-white/10 bg-bg-base/95 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+                {COMMUNITY.map((l) => (
+                  <Link
+                    key={l.to}
+                    to={l.to}
+                    className={`block rounded-lg px-3 py-2 text-sm transition ${
+                      isActive(l.to) ? "bg-white/[0.06] text-white" : "text-[#8A8F98] hover:bg-white/[0.04] hover:text-white"
+                    }`}
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Link to="/pricing" className={navLinkClass("/pricing")}>
+            Pricing
+          </Link>
+        </nav>
+
+        {/* Desktop actions */}
+        <div className="hidden flex-none items-center gap-4 lg:flex">
           {user ? (
             <>
-              <Link to="/messages" title="Messages" className={`relative ${iconLink}`}>
-                💬
+              <Link
+                to="/messages"
+                className={`relative ${isActive("/messages") ? "text-white" : "text-[#8A8F98] hover:text-white"}`}
+                title="Messages"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-9 6l3-3h9a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v11z" />
+                </svg>
                 {unread > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+                  <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold text-white">
                     {unread > 9 ? "9+" : unread}
                   </span>
                 )}
               </Link>
-              {user.role === "ADMIN" && (
-                <Link to="/admin" title="Admin dashboard" className={iconLink}>
-                  🛡️
-                </Link>
-              )}
-              <Link to="/settings" title="Settings" className={iconLink}>
-                ⚙️
-              </Link>
-              <Link to="/ask" className="btn-primary ml-1">
-                Ask
-              </Link>
-              <Link to={`/users/${user.username}`} title="Your profile" className="ml-1">
-                {user.avatarUrl ? (
-                  <img
-                    src={user.avatarUrl}
-                    alt=""
-                    referrerPolicy="no-referrer"
-                    className="h-8 w-8 rounded-full border border-slate-200 transition hover:ring-2 hover:ring-indigo-400 dark:border-slate-700"
-                  />
-                ) : (
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                    {user.username.charAt(0).toUpperCase()}
-                  </span>
+
+              {/* Account dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setDropdown((d) => (d === "account" ? null : "account"))}
+                  className="flex items-center gap-1.5 group"
+                >
+                  {user.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      className="h-8 w-8 rounded-full border border-white/10 object-cover group-hover:border-accent transition-colors"
+                    />
+                  ) : (
+                    <span className="grid h-8 w-8 place-items-center rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-white group-hover:border-accent transition-colors">
+                      {user.username.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <svg className={`h-3 w-3 text-[#8A8F98] transition-transform ${dropdown === "account" ? "rotate-180" : ""}`} viewBox="0 0 12 12" fill="none">
+                    <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {dropdown === "account" && (
+                  <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl border border-white/10 bg-bg-base/95 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+                    <div className="px-3 py-2 border-b border-white/[0.06] mb-1">
+                      <p className="truncate text-sm font-semibold text-white">{user.name ?? user.username}</p>
+                      <p className="truncate text-[11px] text-[#8A8F98]">
+                        @{user.username}
+                        {user.pro && <span className="ml-1 text-amber-400">· ⭐ Pro</span>}
+                      </p>
+                    </div>
+                    <Link to={`/users/${user.username}`} className="block rounded-lg px-3 py-2 text-sm text-[#8A8F98] transition hover:bg-white/[0.04] hover:text-white">
+                      👤 View profile
+                    </Link>
+                    <Link to="/settings" className="block rounded-lg px-3 py-2 text-sm text-[#8A8F98] transition hover:bg-white/[0.04] hover:text-white">
+                      ⚙️ Settings
+                    </Link>
+                    {user.role === "ADMIN" && (
+                      <Link to="/admin" className="block rounded-lg px-3 py-2 text-sm text-[#8A8F98] transition hover:bg-white/[0.04] hover:text-white">
+                        🛡️ Admin
+                      </Link>
+                    )}
+                    <button
+                      onClick={handleLogout}
+                      className="block w-full rounded-lg px-3 py-2 text-left text-sm text-[#8A8F98] transition hover:bg-white/[0.04] hover:text-white"
+                    >
+                      ↩ Log out
+                    </button>
+                  </div>
                 )}
-              </Link>
-              <button
-                onClick={handleLogout}
-                title="Log out"
-                className="ml-1 text-sm text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-              >
-                Log out
-              </button>
+              </div>
             </>
           ) : (
-            <Link to="/login" className="btn-primary ml-1">
-              Sign in
+            <Link to="/login" className="btn-primary py-1.5 px-4 text-xs">
+              Login
             </Link>
           )}
-        </nav>
+        </div>
 
         {/* Mobile controls */}
-        <div className="flex items-center gap-1 lg:hidden">
-          <ThemeToggle />
+        <div className="flex items-center gap-4 lg:hidden">
           {user && (
-            <Link to="/messages" title="Messages" className={`relative ${iconLink}`}>
+            <Link to="/messages" className="relative text-sm text-[#8A8F98] hover:text-white">
               💬
               {unread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                <span className="absolute -right-1 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent text-[8px] font-bold text-white">
                   {unread > 9 ? "9+" : unread}
                 </span>
               )}
@@ -157,81 +219,97 @@ export default function Navbar() {
             onClick={() => setMenuOpen((v) => !v)}
             aria-label="Menu"
             aria-expanded={menuOpen}
-            className={iconLink}
+            className="text-[#8A8F98] hover:text-white p-1.5"
           >
-            {menuOpen ? "✕" : "☰"}
+            {menuOpen ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+              </svg>
+            )}
           </button>
         </div>
       </div>
 
+      {/* Click-away backdrop for desktop dropdowns */}
+      {dropdown && (
+        <div className="fixed inset-0 z-40 hidden lg:block" onClick={() => setDropdown(null)} />
+      )}
+
       {/* Mobile dropdown panel */}
       {menuOpen && (
-        <div className="animate-fade-in border-t border-slate-200/70 bg-white/95 px-4 py-3 backdrop-blur lg:hidden dark:border-slate-800/70 dark:bg-slate-950/95">
+        <div className="animate-fade-in border-t border-white/[0.06] bg-bg-base/95 px-6 py-4 backdrop-blur-xl lg:hidden">
           {user && (
             <Link
               to={`/users/${user.username}`}
-              className="mb-2 flex items-center gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800"
+              className="mb-4 flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"
             >
               {user.avatarUrl ? (
                 <img
                   src={user.avatarUrl}
                   alt=""
                   referrerPolicy="no-referrer"
-                  className="h-10 w-10 rounded-full border border-slate-200 dark:border-slate-700"
+                  className="h-9 w-9 rounded-full border border-white/10 object-cover"
                 />
               ) : (
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-indigo-100 font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-white/5 border border-white/10 text-sm font-semibold text-white">
                   {user.username.charAt(0).toUpperCase()}
                 </span>
               )}
               <div className="min-w-0">
-                <p className="truncate font-semibold text-slate-900 dark:text-slate-100">
+                <p className="truncate text-xs font-semibold text-white">
                   {user.name ?? user.username}
+                  {user.pro && <span className="ml-1 text-amber-400">· ⭐ Pro</span>}
                 </p>
-                <p className="meta truncate">View your profile →</p>
+                <p className="text-[10px] text-[#8A8F98] truncate">View Profile →</p>
               </div>
             </Link>
           )}
-          <div className="grid grid-cols-2 gap-1">
-            {NAV_LINKS.map((l) => (
+          <div className="flex flex-col gap-1">
+            {[...PRIMARY, ...COMMUNITY, { to: "/pricing", label: "Pricing" }].map((l) => (
               <Link
                 key={l.to}
                 to={l.to}
-                className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="rounded-md px-3 py-2 text-sm font-medium text-[#8A8F98] transition hover:bg-white/[0.04] hover:text-white"
               >
-                <span className="text-lg">{l.emoji}</span> {l.label}
+                {l.label}
               </Link>
             ))}
             {user && (
-              <Link
-                to="/settings"
-                className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <span className="text-lg">⚙️</span> Settings
-              </Link>
-            )}
-            {user?.role === "ADMIN" && (
-              <Link
-                to="/admin"
-                className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <span className="text-lg">🛡️</span> Admin
-              </Link>
+              <>
+                <Link
+                  to="/settings"
+                  className="rounded-md px-3 py-2 text-sm font-medium text-[#8A8F98] transition hover:bg-white/[0.04] hover:text-white"
+                >
+                  ⚙️ Settings
+                </Link>
+                {user.role === "ADMIN" && (
+                  <Link
+                    to="/admin"
+                    className="rounded-md px-3 py-2 text-sm font-medium text-[#8A8F98] transition hover:bg-white/[0.04] hover:text-white"
+                  >
+                    🛡️ Admin Dashboard
+                  </Link>
+                )}
+              </>
             )}
           </div>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-4 pt-4 border-t border-white/[0.06] flex items-center gap-3">
             {user ? (
               <>
-                <Link to="/ask" className="btn-primary flex-1">
-                  ✍️ Ask a question
+                <Link to="/ask" className="btn-primary flex-1 text-center py-2 text-xs">
+                  Ask a question
                 </Link>
-                <button onClick={handleLogout} className="btn-secondary flex-none">
+                <button onClick={handleLogout} className="btn-secondary py-2 px-4 text-xs">
                   Log out
                 </button>
               </>
             ) : (
-              <Link to="/login" className="btn-primary w-full">
-                Sign in
+              <Link to="/login" className="btn-primary w-full text-center py-2 text-xs">
+                Login
               </Link>
             )}
           </div>

@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -131,16 +132,67 @@ public class QuestionController {
         Question question = questions.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Question not found"));
 
-        Map<String, Object> json = questionService.toJson(question, currentUser.optionalUserId(http));
+        String viewerId = currentUser.optionalUserId(http);
+        Map<String, Object> json = questionService.toJson(question, viewerId);
 
         List<Comment> commentList = comments.findByQuestionIdOrderByCreatedAtAsc(id);
         Map<String, User> authors = users
                 .findAllById(commentList.stream().map(Comment::getAuthorId).distinct().toList())
                 .stream().collect(Collectors.toMap(User::getId, Function.identity()));
-        json.put("comments", commentList.stream()
-                .map(c -> Json.comment(c, authors.get(c.getAuthorId())))
-                .toList());
+
+        List<Comment> answersList = commentList.stream()
+                .filter(c -> c.getParentId() == null)
+                .toList();
+
+        List<String> answerIds = answersList.stream().map(Comment::getId).toList();
+
+        Map<String, Long> commentVoteCounts = toCountMap(votes.countByCommentIds(answerIds));
+        Set<String> viewerVotedComments = viewerId == null
+                ? Set.of()
+                : votes.findByUserIdAndCommentIdIn(viewerId, answerIds).stream()
+                        .map(Vote::getCommentId).collect(Collectors.toSet());
+
+        String acceptedId = question.getAcceptedCommentId();
+
+        List<Comment> sortedAnswers = answersList.stream()
+                .sorted((a, b) -> {
+                    if (a.getId().equals(acceptedId)) return -1;
+                    if (b.getId().equals(acceptedId)) return 1;
+                    long countA = commentVoteCounts.getOrDefault(a.getId(), 0L);
+                    long countB = commentVoteCounts.getOrDefault(b.getId(), 0L);
+                    return Long.compare(countB, countA);
+                })
+                .toList();
+
+        Map<String, List<Comment>> repliesByParent = commentList.stream()
+                .filter(c -> c.getParentId() != null)
+                .collect(Collectors.groupingBy(Comment::getParentId));
+
+        List<Map<String, Object>> answersJson = sortedAnswers.stream().map(ans -> {
+            Map<String, Object> ansMap = Json.comment(
+                    ans,
+                    authors.get(ans.getAuthorId()),
+                    commentVoteCounts.getOrDefault(ans.getId(), 0L),
+                    viewerVotedComments.contains(ans.getId())
+            );
+            List<Comment> replies = repliesByParent.getOrDefault(ans.getId(), List.of());
+            List<Map<String, Object>> repliesJson = replies.stream()
+                    .map(r -> Json.comment(r, authors.get(r.getAuthorId())))
+                    .toList();
+            ansMap.put("comments", repliesJson);
+            return ansMap;
+        }).toList();
+
+        json.put("comments", answersJson);
         return json;
+    }
+
+    private static Map<String, Long> toCountMap(List<Object[]> rows) {
+        Map<String, Long> map = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            map.put((String) row[0], ((Number) row[1]).longValue());
+        }
+        return map;
     }
 
     @DeleteMapping("/{id}")
@@ -170,10 +222,29 @@ public class QuestionController {
         return Map.of("voteCount", votes.countByQuestionId(id), "viewerHasVoted", existing.isEmpty());
     }
 
+    @PostMapping("/{id}/comments/{commentId}/vote")
+    public Map<String, Object> voteComment(@PathVariable String id,
+                                           @PathVariable String commentId,
+                                           HttpServletRequest http) {
+        User user = currentUser.requireActiveUser(http);
+        Comment comment = comments.findById(commentId)
+                .filter(c -> c.getQuestionId().equals(id))
+                .orElseThrow(() -> ApiException.notFound("Answer not found"));
+
+        Optional<Vote> existing = votes.findByUserIdAndCommentId(user.getId(), commentId);
+        if (existing.isPresent()) {
+            votes.delete(existing.get());
+        } else {
+            votes.save(Vote.createCommentVote(user.getId(), commentId));
+        }
+        return Map.of("voteCount", votes.countByCommentId(commentId), "viewerHasVoted", existing.isEmpty());
+    }
+
     @PostMapping("/{id}/comments")
     public ResponseEntity<Map<String, Object>> comment(
             @PathVariable String id,
             @RequestParam String body,
+            @RequestParam(required = false) String parentId,
             @RequestParam(value = "image", required = false) MultipartFile image,
             HttpServletRequest http) {
         User user = currentUser.requireActiveUser(http);
@@ -181,6 +252,14 @@ public class QuestionController {
         if (cleanBody.isEmpty()) throw ApiException.badRequest("Comment cannot be empty");
         if (cleanBody.length() > 5000) throw ApiException.badRequest("Comment is too long");
         if (!questions.existsById(id)) throw ApiException.notFound("Question not found");
+
+        if (parentId != null) {
+            Comment parent = comments.findById(parentId)
+                    .orElseThrow(() -> ApiException.notFound("Answer not found"));
+            if (parent.getParentId() != null) {
+                throw ApiException.badRequest("Only answers can have comments");
+            }
+        }
 
         String violation = moderation.rejectIfProfane(user, "comment", cleanBody);
         if (violation != null) throw ApiException.badRequest(violation);
@@ -190,6 +269,7 @@ public class QuestionController {
         comment.setImageUrl(uploads.saveImage(image));
         comment.setAuthorId(user.getId());
         comment.setQuestionId(id);
+        comment.setParentId(parentId);
         comments.save(comment);
 
         return ResponseEntity.status(201).body(Json.comment(comment, user));

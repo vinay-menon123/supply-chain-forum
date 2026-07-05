@@ -18,6 +18,7 @@ public class Comment {
     private Instant createdAt = Instant.now();
     private String authorId;
     private String questionId;
+    private String parentId;
 
     public static Comment create() {
         Comment comment = new Comment();
@@ -37,4 +38,6 @@ public class Comment {
     public void setAuthorId(String authorId) { this.authorId = authorId; }
     public String getQuestionId() { return questionId; }
     public void setQuestionId(String questionId) { this.questionId = questionId; }
+    public String getParentId() { return parentId; }
+    public void setParentId(String parentId) { this.parentId = parentId; }
 }

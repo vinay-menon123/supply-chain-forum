@@ -35,6 +35,9 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-noreply@cscen.local}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_MODEL: ${GEMINI_API_MODEL:-gemini-2.5-flash}
+      NEWS_SYNC_CRON: ${NEWS_SYNC_CRON:-0 30 23 * * *}
       APP_URL: ${APP_URL:-http://localhost:3000}
       PORT: "4000"
     volumes:

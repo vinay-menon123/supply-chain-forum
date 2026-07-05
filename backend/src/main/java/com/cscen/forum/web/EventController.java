@@ -8,6 +8,7 @@ import com.cscen.forum.repo.EventRsvpRepository;
 import com.cscen.forum.repo.UserRepository;
 import com.cscen.forum.security.CurrentUser;
 import com.cscen.forum.service.Json;
+import com.cscen.forum.service.NotificationService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -39,13 +40,16 @@ public class EventController {
     private final EventRsvpRepository rsvps;
     private final UserRepository users;
     private final CurrentUser currentUser;
+    private final NotificationService notifications;
 
     public EventController(EventRepository events, EventRsvpRepository rsvps,
-                           UserRepository users, CurrentUser currentUser) {
+                           UserRepository users, CurrentUser currentUser,
+                           NotificationService notifications) {
         this.events = events;
         this.rsvps = rsvps;
         this.users = users;
         this.currentUser = currentUser;
+        this.notifications = notifications;
     }
 
     @GetMapping
@@ -142,14 +146,15 @@ public class EventController {
     @PostMapping("/{id}/rsvp")
     public Map<String, Object> rsvp(@PathVariable String id, HttpServletRequest http) {
         User user = currentUser.requireActiveUser(http);
-        if (!events.existsById(id)) {
-            throw ApiException.notFound("Event not found");
-        }
+        Event event = events.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Event not found"));
         Optional<EventRsvp> existing = rsvps.findByUserIdAndEventId(user.getId(), id);
         if (existing.isPresent()) {
             rsvps.delete(existing.get());
         } else {
             rsvps.save(EventRsvp.create(id, user.getId()));
+            // Newly attending → email a confirmation with a calendar (.ics) invite.
+            notifications.notifyEventRsvp(user, event);
         }
         return Map.of("rsvpCount", rsvps.countByEventId(id), "viewerRsvped", existing.isEmpty());
     }

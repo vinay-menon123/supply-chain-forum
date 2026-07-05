@@ -16,7 +16,18 @@ export interface User {
   topics?: string | null;
   openToMentor?: boolean;
   seekingMentor?: boolean;
+  notifyAllQuestions?: boolean;
+  plan?: "FREE" | "PRO";
+  pro?: boolean;
+  planExpiresAt?: string | null;
   reputation?: number;
+  createdAt: string;
+}
+
+export interface MarketplaceLead {
+  buyer: User;
+  listingId: string;
+  listingTitle: string;
   createdAt: string;
 }
 
@@ -90,6 +101,10 @@ export interface Comment {
   imageUrl: string | null;
   createdAt: string;
   author: User;
+  parentId?: string | null;
+  voteCount?: number;
+  viewerHasVoted?: boolean;
+  comments?: Comment[];
 }
 
 export interface Question {

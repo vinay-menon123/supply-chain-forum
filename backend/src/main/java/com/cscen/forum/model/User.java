@@ -32,6 +32,14 @@ public class User {
     private String headline;       // professional role/headline (used for verification)
     private String bio;
     private String verifyStatus = "PENDING"; // PENDING | APPROVED | REJECTED
+    private String firstName;
+    private String lastName;
+    private String position;
+    private String passwordHash;
+    private boolean notifyAllQuestions;
+    private String plan = "FREE";          // FREE | PRO — marketplace subscription tier
+    private Instant planExpiresAt;         // null = no expiry (e.g. admin-granted / lifetime)
+
 
     public static User create() {
         User user = new User();
@@ -79,4 +87,23 @@ public class User {
     public void setBio(String bio) { this.bio = bio; }
     public String getVerifyStatus() { return verifyStatus; }
     public void setVerifyStatus(String verifyStatus) { this.verifyStatus = verifyStatus; }
+    public String getFirstName() { return firstName; }
+    public void setFirstName(String firstName) { this.firstName = firstName; }
+    public String getLastName() { return lastName; }
+    public void setLastName(String lastName) { this.lastName = lastName; }
+    public String getPosition() { return position; }
+    public void setPosition(String position) { this.position = position; }
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public boolean isNotifyAllQuestions() { return notifyAllQuestions; }
+    public void setNotifyAllQuestions(boolean notifyAllQuestions) { this.notifyAllQuestions = notifyAllQuestions; }
+    public String getPlan() { return plan; }
+    public void setPlan(String plan) { this.plan = plan; }
+    public Instant getPlanExpiresAt() { return planExpiresAt; }
+    public void setPlanExpiresAt(Instant planExpiresAt) { this.planExpiresAt = planExpiresAt; }
+
+    /** True when the member holds an active PRO (paid) subscription. */
+    public boolean isPro() {
+        return "PRO".equals(plan) && (planExpiresAt == null || planExpiresAt.isAfter(Instant.now()));
+    }
 }

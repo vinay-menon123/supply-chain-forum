@@ -1,18 +1,31 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, apiForm } from "../api";
 import { useAuth } from "../auth";
 import { CATEGORIES, categoryMeta, KINDS, kindMeta } from "../marketplace";
 import { timeAgo } from "../time";
-import type { Listing } from "../types";
+import type { Listing, MarketplaceLead } from "../types";
 
 export default function Marketplace() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [error, setError] = useState("");
   const [kindFilter, setKindFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [upgradeMsg, setUpgradeMsg] = useState("");
+
+  async function handleContact(listing: Listing) {
+    try {
+      const res = await api<{ sellerUsername: string }>(`/listings/${listing.id}/contact`, {
+        method: "POST",
+      });
+      navigate(`/messages/${res.sellerUsername}`);
+    } catch (err) {
+      setUpgradeMsg(err instanceof Error ? err.message : "Could not contact this supplier.");
+    }
+  }
 
   function load() {
     setListings(null);
@@ -55,7 +68,7 @@ export default function Marketplace() {
           </button>
         ) : (
           <Link to="/login" className="btn-primary flex-none">
-            Sign in to post
+            Log in to post
           </Link>
         )}
       </div>
@@ -68,6 +81,8 @@ export default function Marketplace() {
           }}
         />
       )}
+
+      {user && <LeadInbox isPro={!!user.pro} />}
 
       {/* Filters */}
       <div className="mb-3 mt-6 flex flex-wrap items-center gap-1.5">
@@ -121,11 +136,86 @@ export default function Marketplace() {
               listing={listing}
               canDelete={!!user && (user.id === listing.authorId || user.role === "ADMIN")}
               isOwner={user?.id === listing.authorId}
+              loggedIn={!!user}
               onDelete={() => handleDelete(listing.id)}
+              onContact={() => handleContact(listing)}
             />
           </div>
         ))}
       </div>
+
+      {upgradeMsg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="card max-w-sm w-full bg-bg-elevated/95 border-white/10 p-6 rounded-2xl text-center shadow-[0_8px_32px_rgba(0,0,0,0.85)]">
+            <div className="text-3xl mb-2">⭐</div>
+            <h3 className="text-base font-semibold text-white">Upgrade to Pro</h3>
+            <p className="text-sm text-[#8A8F98] mt-2">{upgradeMsg}</p>
+            <div className="mt-5 flex gap-3">
+              <Link to="/pricing" className="btn-primary flex-1 text-center text-xs py-2">
+                See plans →
+              </Link>
+              <button onClick={() => setUpgradeMsg("")} className="btn-secondary text-xs py-2 px-4">
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Seller's "buyer interest" inbox. Free sellers see the count; PRO sees who + what. */
+function LeadInbox({ isPro }: { isPro: boolean }) {
+  const [data, setData] = useState<{ count: number; pro: boolean; leads: MarketplaceLead[] } | null>(null);
+
+  useEffect(() => {
+    api<{ count: number; pro: boolean; leads: MarketplaceLead[] }>("/listings/leads")
+      .then(setData)
+      .catch(() => {});
+  }, []);
+
+  if (!data || data.count === 0) return null;
+
+  return (
+    <div className="card animate-fade-in-up mt-4 border-white/[0.06] bg-gradient-to-b from-white/[0.05] to-white/[0.01] p-5 rounded-xl">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-white">
+          📥 Buyer interest — {data.count} {data.count === 1 ? "lead" : "leads"} on your listings
+        </span>
+        {!isPro && (
+          <Link to="/pricing" className="btn-primary text-xs py-1.5 px-3">
+            Unlock leads with Pro →
+          </Link>
+        )}
+      </div>
+      {isPro ? (
+        <ul className="mt-3 space-y-2">
+          {data.leads.map((l, i) => (
+            <li
+              key={i}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs"
+            >
+              <span className="text-slate-200">
+                <Link to={`/users/${l.buyer.username}`} className="font-semibold text-accent hover:underline">
+                  @{l.buyer.username}
+                </Link>{" "}
+                is interested in <span className="text-white">{l.listingTitle}</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="text-[#8A8F98]">{timeAgo(l.createdAt)}</span>
+                <Link to={`/messages/${l.buyer.username}`} className="text-accent hover:underline font-semibold">
+                  Reply →
+                </Link>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="meta mt-2">
+          Pro suppliers see exactly who reached out and can reply directly. Free members see the count only.
+        </p>
+      )}
     </div>
   );
 }
@@ -157,17 +247,25 @@ function ListingCard({
   listing,
   canDelete,
   isOwner,
+  loggedIn,
   onDelete,
+  onContact,
 }: {
   listing: Listing;
   canDelete: boolean;
   isOwner: boolean;
+  loggedIn: boolean;
   onDelete: () => void;
+  onContact: () => void;
 }) {
   const kind = kindMeta(listing.kind);
   const cat = categoryMeta(listing.category);
   return (
-    <article className="card card-lift flex h-full flex-col">
+    <article
+      className={`card card-lift flex h-full flex-col ${
+        listing.author.pro ? "ring-1 ring-amber-400/30" : ""
+      }`}
+    >
       {listing.imageUrl && (
         <img
           src={listing.imageUrl}
@@ -182,6 +280,11 @@ function ListingCard({
         <span className="badge bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
           {cat.emoji} {cat.label}
         </span>
+        {listing.author.pro && (
+          <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+            ⭐ Pro Supplier
+          </span>
+        )}
       </div>
       <h3 className="font-semibold text-slate-900 dark:text-slate-100">{listing.title}</h3>
       <p className="mt-1 line-clamp-3 flex-1 text-sm text-slate-600 dark:text-slate-400">
@@ -201,9 +304,13 @@ function ListingCard({
       <div className="mt-3 flex items-center gap-2">
         {isOwner ? (
           <span className="btn-secondary flex-1 cursor-default opacity-70">Your listing</span>
-        ) : (
-          <Link to={`/messages/${listing.author.username}`} className="btn-primary flex-1">
+        ) : loggedIn ? (
+          <button onClick={onContact} className="btn-primary flex-1">
             💬 Contact {listing.author.name?.split(" ")[0] ?? "member"}
+          </button>
+        ) : (
+          <Link to="/login" className="btn-primary flex-1">
+            💬 Log in to contact
           </Link>
         )}
         {canDelete && (

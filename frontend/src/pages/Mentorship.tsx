@@ -117,7 +117,7 @@ export default function Mentorship() {
       {!user && (
         <p className="animate-fade-in-up mt-8 text-center text-sm text-slate-600 dark:text-slate-400">
           <Link to="/login" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
-            Sign in
+            Log in
           </Link>{" "}
           to join the mentorship program.
         </p>

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
+import { startVisibilityInterval } from "../poll";
 import type { ChatMessage, User } from "../types";
 
 interface ThreadResponse {
@@ -38,10 +39,11 @@ export default function MessageThread() {
         });
 
     load();
-    const timer = setInterval(load, 4000);
+    // Live-refresh the thread while visible; pause when backgrounded (poll.ts).
+    const stop = startVisibilityInterval(load, 4000);
     return () => {
       active = false;
-      clearInterval(timer);
+      stop();
     };
   }, [username]);
 

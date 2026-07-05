@@ -5,10 +5,12 @@ import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Properties;
 
@@ -86,6 +88,28 @@ public class MailService {
             return true;
         } catch (Exception e) {
             log.warn("Email to {} failed: {}", to, e.getMessage());
+            return false;
+        }
+    }
+
+    /** Sends an HTML email with a calendar (.ics) invite attached. */
+    public boolean sendWithCalendar(String to, String subject, String html, String ics, String filename) {
+        if (sender == null || to == null || to.isBlank()) {
+            return false;
+        }
+        try {
+            MimeMessage message = sender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8"); // multipart
+            helper.setTo(to);
+            helper.setFrom(from);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+            helper.addAttachment(filename,
+                    new ByteArrayResource(ics.getBytes(StandardCharsets.UTF_8)), "text/calendar");
+            sender.send(message);
+            return true;
+        } catch (Exception e) {
+            log.warn("Calendar email to {} failed: {}", to, e.getMessage());
             return false;
         }
     }

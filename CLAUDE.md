@@ -49,8 +49,8 @@ original Node/Express/Prisma backend, which now lives only in git history.)
 - `hibernate.jdbc.time_zone=UTC`, `Instant` fields.
 - Auth: **jjwt 0.12** — HS256. Key rule: if `JWT_SECRET` ≥ 32 bytes, raw bytes are the key
   (preserves Railway session continuity); otherwise SHA-256-stretched. Test tokens must match.
-- Google verify: `com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier`
-  (google-api-client 2.7.0). **Not** the `openidconnect` package.
+  Login = email/username + password (SHA-256 hash) + email OTP; see `web/AuthController.java`.
+  (Google Sign-In removed — the `GoogleIdTokenVerifier`/google-api-client path is gone.)
 - AI moderation: **Anthropic Java SDK** `com.anthropic:anthropic-java:2.34.0`. Model default
   `claude-opus-4-8` (override via `ANTHROPIC_MODEL`), `maxTokens=256`, no thinking param,
   **fails open** (never blocks on API error). See `service/AiModerationClient.java`.
@@ -64,7 +64,12 @@ original Node/Express/Prisma backend, which now lives only in git history.)
 
 ## 4. Features (all shipped)
 
-- **Auth:** Google Sign-In only (verified emails). JWT Bearer. Onboarding at `/welcome`.
+- **Auth:** **email + password with an email OTP** (2-step) — `AuthController` `/send-otp`,
+  `/register`, `/login`. OTP is a 6-digit code, single-use, **5-min TTL** (`otpStorage`, in-memory),
+  emailed via `MailService`. When SMTP is off *or auth fails*, the API **falls open** to a
+  "(Simulated)" response that returns a `devOtp` for local testing. JWT Bearer. Onboarding at
+  `/welcome` (topic selection). (Google Sign-In was removed; `GOOGLE_CLIENT_ID` is now unused and
+  `/api/auth/config` returns an empty client id.)
 - **Member types (6, from CSCEN model):** Academician, Professional, Researcher, Student,
   Industry Partner, Startup & Tech Partner. Phone + organization **optional**. Editable any time
   at **`/settings`** (change your "role"/member type, headline, org, phone, LinkedIn, bio, topics,
@@ -77,16 +82,39 @@ original Node/Express/Prisma backend, which now lives only in git history.)
   APPROVED shows a ✅ Verified badge. (Chosen approach: "AI check + admin review".)
 - **Q&A:** questions (title/body, optional image), comments (optional image), 11 domain tags,
   upvotes, share count, **accepted answers**.
-- **Topic subscriptions:** members follow topics (at onboarding, in `/settings`, or the Feed
-  "🔔 Topics you follow" widget). New question in a followed topic → email to followers
-  (`NotificationService`, `@Async`, no-op until SMTP set).
+- **Topic subscriptions:** members follow topics (at onboarding, in `/settings`, the Feed
+  "🔔 Topics you follow" widget, or their own **Profile** "Favored SCM Domains" editor). New
+  question in a followed topic → email to followers. `/settings` also has a **"Notify me for every
+  new question"** toggle (`User.notifyAllQuestions`) that emails on *all* new questions regardless of
+  topic. All email is via `NotificationService` (`@Async`, no-op until SMTP set). NOTE: partial
+  profile updates (Welcome/Profile pages) omit `notifyAllQuestions`; the endpoint only overwrites it
+  when the field is present, so those screens don't reset the preference.
 - **Marketplace (`/marketplace`):** OFFER/SEEK listings across 5 categories (Warehouse, Transport,
   Equipment, Services, General Logistics) with location/size/price/photo; contact seller via DMs.
   Backed by the `Listing` table; wordlist/AI moderated; owner/admin delete.
+- **Marketplace monetization (TradeIndia/IndiaMART-style — buyers free, sellers pay):**
+  `User.plan` = FREE | PRO (+ `planExpiresAt`; `User.isPro()`). **Contact gating** —
+  `POST /api/listings/{id}/contact` records a `MarketplaceLead` and returns the seller's username
+  (client then opens the DM); FREE members are capped at **5 distinct supplier contacts / rolling
+  30 days** (`FREE_MONTHLY_CONTACTS`), PRO is unlimited (re-contacting a listing you already reached
+  is free). **Anti-disintermediation:** `MessageController` redacts phone/email in DMs for FREE
+  senders (masked as "[contact hidden — upgrade to Pro]"); PRO can share freely. NOTE: redaction is
+  global for free users, not marketplace-only — dial back if it hurts community DMs. **Pro perks:**
+  ⭐ Pro Supplier badge (`Json` exposes `pro` on author/public/private), priority placement (PRO
+  listings sort first in `/api/listings`), and a **lead inbox** (`GET /api/listings/leads` — count
+  for free sellers, who+what for PRO). **Pricing page** `/pricing` (₹0 Member vs ₹1,999/mo Pro);
+  Pro CTA sends an upgrade request via `/api/contact`. **Payments are manual for now** — admin grants
+  via `POST /api/admin/plan {username, plan, months}` (Admin page "Marketplace subscriptions" card);
+  wire Razorpay behind this seam later (buyer free / seller pays is the profit model).
 - **Reputation:** `5*questions + 2*comments + 10*upvotes_received + 15*accepted`. Leaderboard.
 - **Profiles:** click any username → their questions, comments ("Commented on" tab), upvotes,
   headline/bio/LinkedIn, verified + mentor badges. Self sees an "Edit profile" → `/settings`.
 - **Direct messages:** 1:1 chat with read tracking, unread badge. Polling (4s thread / 20s unread).
+  New DM → email to the recipient (`NotificationService.notifyNewMessage`); this also covers the
+  mentorship "connect" flow (which happens over DMs).
+- **Email notifications (all via `MailService`/SMTP):** OTP sign-in, weekly digest, new followed-topic
+  / all-questions question, new marketplace listing (`notifyNewListing` → all non-banned members),
+  and new direct message. Everything degrades gracefully to a no-op when SMTP is off.
 - **Moderation:** wordlist + optional AI. Flag → auto-ban at 5 flags. Admin dashboard.
 - **Admin** (`ADMIN_EMAILS`): delete any question/comment, view flagged users, ban/unban,
   verification review, **seed starter content** (`POST /api/admin/seed`), send test digest.
@@ -99,7 +127,10 @@ original Node/Express/Prisma backend, which now lives only in git history.)
 - **Mentorship** (`/mentorship`): opt in as mentor/mentee at onboarding; browse + connect via DMs.
 - **Weekly digest email:** top-5 questions of the week to all non-banned users, Mondays.
 - **UI:** animated landing page (signed-out only, with feature grid), animated login/feed/navbar,
-  aurora background, **mobile-responsive navbar (hamburger menu at `< lg`)**, dark mode.
+  **calm layered background** — floating aurora blobs (`.app-aurora`, `-z-20`) + a slow drifting
+  connected-node particle canvas (`components/BackgroundNetwork.tsx`, `-z-10`, mounted globally in
+  `App.tsx`), both respecting `prefers-reduced-motion`. **Mobile-responsive navbar (hamburger at
+  `< lg`)**, dark mode.
 
 ---
 
@@ -111,21 +142,22 @@ docker-compose.yml              Local: postgres + backend(:4000) + frontend(:300
 README.md                       Public-facing docs (stack, Railway steps, env table, API table)
 
 backend/
-  pom.xml                       Spring Boot 3.4.1, Java 21; jjwt, google-api-client, anthropic-java, starter-mail
+  pom.xml                       Spring Boot 3.4.1, Java 21; jjwt, google-api-client, anthropic-java, starter-mail, azure-storage-blob
   Dockerfile                    Maven multi-stage (for compose/k8s)
   src/main/resources/
     application.properties       server.port=${PORT:4000}, ddl-auto=none, sql.init.mode=always, quoted identifiers, UTC
     schema.sql                   IDEMPOTENT migration — see §7. Safe from any prior version.
   src/main/java/com/cscen/forum/
     ForumApplication.java
-    config/    DataSourceConfig (parses postgres:// URLs), WebConfig (uploads + SPA fallback), GlobalExceptionHandler ({"error":msg})
+    config/    DataSourceConfig (parses postgres:// URLs), WebConfig (uploads + SPA fallback), StorageConfig (picks Local vs Azure UploadStorage), GlobalExceptionHandler ({"error":msg})
     model/     User, Question, Comment, Vote, Message, ModerationEvent, Event, EventRsvp, Listing — UUID string ids, static create() factories
     repo/      *Repository — native leaderboard query, JPQL search, mentor/flag finders, findTopicFollowers, findByVerifyStatus, ListingRepository.search
     security/  JwtService, CurrentUser (optionalUserId/requireUserId/requireUser/requireActiveUser/requireAdmin)
     service/   Json (DTO shaping incl. listing()), QuestionService (TAGS×11, toJson, tagLabel), ModerationService (wordlist||AI),
                AiModerationClient (Anthropic SDK — moderation + isSupplyChainRelevant verify),
                MailService (shared JavaMail wrapper, no-op until SMTP), DigestService (@Scheduled + manual test),
-               NotificationService (@Async new-question topic emails), SeedService (idempotent starter content), UploadStorage
+               NotificationService (@Async new-question topic emails), SeedService (idempotent starter content),
+               UploadStorage (interface) + LocalUploadStorage (default, ./uploads) + AzureBlobUploadStorage (env-gated object storage)
     web/       AuthController (google/profile/me — profile now takes topics/linkedin/headline/bio + runs verify),
                QuestionController (create fires notifications), UserController, LeaderboardController, MessageController,
                AdminController (flagged/ban/verify/pending/seed/digest), EventController, MentorshipController,
@@ -135,7 +167,8 @@ frontend/
   vite.config.ts, tsconfig.json, tailwind config (in package/index.css component classes)
   src/
     App.tsx                     Routes (+/settings +/marketplace); `/` = user ? Feed : Landing; aurora background
-    api.ts, auth.tsx (updateUser), theme.ts, types.ts (+Listing), memberTypes.ts (6), tags.ts (11), marketplace.ts (5 cats/2 kinds), time.ts
+    api.ts, auth.tsx (updateUser), theme.ts, types.ts (+Listing), memberTypes.ts (6), tags.ts (11), marketplace.ts (5 cats/2 kinds), time.ts,
+    poll.ts (startVisibilityInterval — polls only while tab visible; used by Navbar unread + MessageThread)
     components/  Navbar (responsive + hamburger), QuestionCard, VoteButton, ShareButton, MemberTypeBadge, TopicPicker
     pages/       Landing, Login, Feed (+follow-topics widget), Ask, QuestionDetail, Profile (+verify/badges),
                  Leaderboard, Events, Mentorship, Marketplace, Welcome (+topics/linkedin), Settings,
@@ -153,16 +186,32 @@ k8s/  00-namespace, 01-secrets (dev placeholders), 02-postgres, 03-backend (imag
 | `DATABASE_URL` | yes | `postgresql://…`. Railway: `${{Postgres.DATABASE_URL}}`. |
 | `PORT` | yes on Railway | `4000`. **Pin it** — Railway's domain targets 4000; injected 8080 caused a 502. |
 | `JWT_SECRET` | yes | ≥32 bytes → raw key (session continuity). Dev: `change-me-in-production`. |
-| `GOOGLE_CLIENT_ID` | yes | OAuth Web Client ID. **Non-secret** (public by design). |
+| `GOOGLE_CLIENT_ID` | no | **Unused now** (Google Sign-In removed). Safe to drop. |
 | `ADMIN_EMAILS` | no | comma-separated; default `vinay.menon2707@gmail.com`. Editable parameter. |
 | `ANTHROPIC_API_KEY` | no | enables AI moderation. Unset → wordlist only (fails open). |
 | `ANTHROPIC_MODEL` | no | default `claude-opus-4-8`. Set `claude-haiku-4-5` for cheaper/faster. |
-| `SMTP_HOST`/`_PORT`/`_USER`/`_PASS`/`_FROM` | no | enables weekly digest. Unset → digest disabled. |
-| `APP_URL` | no | used in digest email links. Prod = the Railway URL. |
+| `SMTP_HOST`/`_PORT`/`_USER`/`_PASS`/`_FROM` | recommended | Powers **all** email: **OTP sign-in**, weekly digest, topic/all-question, DM, and marketplace notifications. Unset → email is a no-op and OTP falls back to a `devOtp` in the API response. |
+| `APP_URL` | no | used in email links. Prod = the Railway URL. |
+| `AZURE_STORAGE_CONNECTION_STRING` | no | **Unset → uploads go to local `./uploads` disk** (fine for one instance/Railway). Set it → images upload to Azure Blob instead (`AzureBlobUploadStorage`), returning absolute blob URLs. This is the config-only switch that unblocks running multiple replicas (local disk isn't shared). Relaxed-binds to `azure.storage.connection-string`. |
+| `AZURE_STORAGE_CONTAINER` | no | default `forum-uploads`. Blob container name; auto-created (public-blob read) on first boot when Azure storage is enabled. |
+
+> **Gmail SMTP gotcha:** `SMTP_USER=…@gmail.com` needs a **16-char App Password** for `SMTP_PASS`
+> (Google account → 2-Step Verification → App passwords), **not** the normal account password.
+> A normal password is rejected with `Authentication failed` (535) and OTP silently falls back to
+> the simulated `devOtp`. Compose auto-loads the root `.env`; restart the backend after changing it.
 
 **Two optional switches to turn on later (in Railway Variables):**
 1. AI moderation → set `ANTHROPIC_API_KEY`.
 2. Weekly digest → set `SMTP_*` + `APP_URL`, then test via `POST /api/admin/digest/test` (admin).
+
+> **Scaling prep (done, dormant until Azure).** Owner plans to move to Azure when DAU > ~2k. Two
+> changes landed ahead of that so the migration is low-friction: (1) **uploads are pluggable** —
+> `UploadStorage` is an interface; local disk is the default and Azure Blob turns on purely by
+> setting `AZURE_STORAGE_CONNECTION_STRING` (no code change), which is the one thing that was
+> blocking >1 replica; (2) **frontend polling pauses when the tab is hidden** (`frontend/src/poll.ts`
+> `startVisibilityInterval`, used by the Navbar unread poll + MessageThread), cutting idle API load
+> from backgrounded tabs. The Azure path is **untested** (no account yet) — only the local fallback
+> is verified; validate the blob upload + public-URL assumptions when the account exists.
 
 ---
 
@@ -175,7 +224,10 @@ DB predated moderation columns and the ALTER ran against a missing column. Fixed
 If you add a column, add it as a guarded `ADD COLUMN IF NOT EXISTS` and never assume it exists
 before adding it.
 
-Tables: `User, Question, Comment, Vote, Message, ModerationEvent, Event, EventRsvp, Listing`.
+Tables: `User, Question, Comment, Vote, Message, ModerationEvent, Event, EventRsvp, Listing,
+MarketplaceLead`. `User` also grew `plan` (guarded ADD COLUMN, default 'FREE') + `planExpiresAt`.
+`MarketplaceLead` (id/listingId/sellerId/buyerId/createdAt) is a fresh CREATE TABLE with a unique
+(listingId, buyerId) index.
 `User` grew `topics, linkedinUrl, headline, bio, verifyStatus` (all guarded ADD COLUMN). `Listing`
 is a fresh `CREATE TABLE IF NOT EXISTS` (kind/category/title/description/location/price/size/imageUrl/authorId).
 
@@ -193,11 +245,16 @@ is a fresh `CREATE TABLE IF NOT EXISTS` (kind/category/title/description/locatio
 
 ---
 
-## 9. Testing without Google
+## 9. Testing / getting a token
 
-Mint HS256 JWTs by hand (sub = userId). Key rule = §3 (secret <32 bytes → `sha256(secret)`
+**Easiest:** drive the real auth flow. `POST /api/auth/send-otp {email}` — when SMTP is off or
+Gmail auth fails it returns a `devOtp` in the JSON — then `POST /api/auth/register {…,otp}` hands
+back a JWT. No Google, no SQL. (Use an `@example.com` email so no real mail is attempted; clean the
+row up afterwards.)
+
+**Or** mint HS256 JWTs by hand (sub = userId). Key rule = §3 (secret <32 bytes → `sha256(secret)`
 as the HMAC key). **The old `demo_user`/`user_two` prototype accounts are now DELETED by the
-seed** (their content looked fake). To test without Google, insert a throwaway admin via SQL and
+seed** (their content looked fake). To bootstrap an admin, insert a throwaway one via SQL and
 mint a token for its id, e.g.:
 ```sql
 INSERT INTO "User" (id,email,username,role,"memberType","verifyStatus")
@@ -206,7 +263,7 @@ ON CONFLICT (id) DO UPDATE SET role='ADMIN';
 ```
 Then `sub=smoketestadmin0000000000001`. Tokens have a 2h TTL — re-mint if you get blanket 401s.
 The 5 real seed members (priya_sharma, daniel_okafor, rahul_verma, ana_ferreira, meera_iyer) have
-no `googleId`, so nobody can log in as them — they're content authors only.
+no `passwordHash`, so nobody can log in as them — they're content authors only.
 
 ---
 

@@ -22,4 +22,13 @@ public interface VoteRepository extends JpaRepository<Vote, String> {
 
     @Query("select count(v) from Vote v, Question q where v.questionId = q.id and q.authorId = :authorId")
     long countReceivedByAuthor(@Param("authorId") String authorId);
+
+    Optional<Vote> findByUserIdAndCommentId(String userId, String commentId);
+
+    long countByCommentId(String commentId);
+
+    List<Vote> findByUserIdAndCommentIdIn(String userId, Collection<String> commentIds);
+
+    @Query("select v.commentId, count(v) from Vote v where v.commentId in :ids group by v.commentId")
+    List<Object[]> countByCommentIds(@Param("ids") Collection<String> ids);
 }

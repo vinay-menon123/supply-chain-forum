@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import TopicPicker, { formatTopics, parseTopics } from "../components/TopicPicker";
-import { MEMBER_TYPES } from "../memberTypes";
 import type { User } from "../types";
 
 export default function Welcome() {
@@ -12,14 +11,7 @@ export default function Welcome() {
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from ?? "/";
 
-  const [memberType, setMemberType] = useState(user?.memberType ?? "");
-  const [headline, setHeadline] = useState(user?.headline ?? "");
-  const [linkedinUrl, setLinkedinUrl] = useState(user?.linkedinUrl ?? "");
-  const [phone, setPhone] = useState(user?.phone ?? "");
-  const [organization, setOrganization] = useState(user?.organization ?? "");
   const [topics, setTopics] = useState<string[]>(parseTopics(user?.topics));
-  const [openToMentor, setOpenToMentor] = useState(user?.openToMentor ?? false);
-  const [seekingMentor, setSeekingMentor] = useState(user?.seekingMentor ?? false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -31,176 +23,67 @@ export default function Welcome() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!memberType) {
-      setError("Please choose how you'll participate in the community");
-      return;
-    }
+    if (!user) return;
+
     setError("");
     setSubmitting(true);
     try {
       const data = await api<{ user: User }>("/auth/profile", {
         method: "POST",
         body: JSON.stringify({
-          memberType,
-          headline,
-          linkedinUrl,
-          phone,
-          organization,
+          memberType: user.memberType || "PROFESSIONAL",
+          headline: user.headline || "",
+          linkedinUrl: user.linkedinUrl || "",
+          phone: user.phone || "",
+          organization: user.organization || "",
+          bio: user.bio || "",
           topics: formatTopics(topics),
-          openToMentor,
-          seekingMentor,
+          openToMentor: user.openToMentor,
+          seekingMentor: user.seekingMentor,
         }),
       });
       updateUser(data.user);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save profile");
+      setError(err instanceof Error ? err.message : "Failed to save selected domains");
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <h1 className="heading mb-1 text-center">Welcome to CSCE Nexus! 🎉</h1>
-      <p className="mb-6 text-center text-sm text-slate-600 dark:text-slate-400">
-        One quick step — tell the community how you participate in the supply chain ecosystem.
-      </p>
+    <div className="mx-auto max-w-2xl pt-10 pb-16">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold tracking-tight text-white">
+          Welcome to <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent via-indigo-300 to-accent">CSCE Nexus</span>! 🎉
+        </h1>
+        <p className="text-sm text-[#8A8F98] mt-2 max-w-md mx-auto">
+          Choose which supply chain domains you want to follow. We'll email you a notification each time a new question is posted in these areas.
+        </p>
+      </div>
 
-      <form onSubmit={handleSubmit} className="card space-y-5">
+      <form onSubmit={handleSubmit} className="card bg-gradient-to-b from-white/[0.06] to-white/[0.01] border-white/[0.06] p-8 rounded-2xl space-y-6 text-left">
         <div>
-          <span className="label">I am joining as a…</span>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {MEMBER_TYPES.map((type) => (
-              <button
-                type="button"
-                key={type.value}
-                onClick={() => setMemberType(type.value)}
-                className={`rounded-lg border p-3 text-left transition ${
-                  memberType === type.value
-                    ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200 dark:bg-indigo-950 dark:ring-indigo-800"
-                    : "border-slate-200 hover:border-indigo-300 dark:border-slate-700 dark:hover:border-indigo-700"
-                }`}
-              >
-                <span className="font-semibold text-slate-900 dark:text-slate-100">
-                  {type.emoji} {type.label}
-                </span>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  {type.description}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="label" htmlFor="headline">
-            Your professional headline
-          </label>
-          <input
-            id="headline"
-            className="input"
-            placeholder="e.g. Procurement Manager at Acme Foods"
-            value={headline}
-            onChange={(e) => setHeadline(e.target.value)}
-            maxLength={160}
-          />
-          <p className="meta mt-1">
-            Helps us confirm you're in the supply chain field — we keep this community focused. 🔒
-          </p>
-        </div>
-
-        <div>
-          <label className="label" htmlFor="linkedin">
-            LinkedIn profile <span className="font-normal text-slate-400">(recommended)</span>
-          </label>
-          <input
-            id="linkedin"
-            className="input"
-            placeholder="https://www.linkedin.com/in/your-name"
-            value={linkedinUrl}
-            onChange={(e) => setLinkedinUrl(e.target.value)}
-          />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="label" htmlFor="organization">
-              Organization <span className="font-normal text-slate-400">(optional)</span>
-            </label>
-            <input
-              id="organization"
-              className="input"
-              placeholder="Company, university or institute"
-              value={organization}
-              onChange={(e) => setOrganization(e.target.value)}
-              maxLength={120}
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="phone">
-              Phone <span className="font-normal text-slate-400">(optional)</span>
-            </label>
-            <input
-              id="phone"
-              type="tel"
-              className="input"
-              placeholder="+91 98765 43210"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div>
-          <span className="label">🔔 Topics you're interested in</span>
-          <p className="meta mb-3">
-            We'll email you when new questions are posted in these areas. Change anytime in Settings.
+          <span className="block text-xs font-semibold text-white uppercase tracking-wider mb-2">
+            🔔 Select your SCM Domains of Interest
+          </span>
+          <p className="text-xs text-[#8A8F98] mb-4">
+            You can modify your followed domains at any time directly from your Profile screen or Settings page.
           </p>
           <TopicPicker selected={topics} onToggle={toggleTopic} />
         </div>
 
-        <div>
-          <span className="label">Mentorship 🤝</span>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setOpenToMentor(!openToMentor)}
-              className={`rounded-lg border p-3 text-left text-sm transition ${
-                openToMentor
-                  ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200 dark:bg-emerald-950 dark:ring-emerald-800"
-                  : "border-slate-200 hover:border-emerald-300 dark:border-slate-700"
-              }`}
-            >
-              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                🎓 I'm open to mentoring others
-              </span>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                Appear on the mentorship board so members can reach out.
-              </p>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSeekingMentor(!seekingMentor)}
-              className={`rounded-lg border p-3 text-left text-sm transition ${
-                seekingMentor
-                  ? "border-amber-500 bg-amber-50 ring-2 ring-amber-200 dark:bg-amber-950 dark:ring-amber-800"
-                  : "border-slate-200 hover:border-amber-300 dark:border-slate-700"
-              }`}
-            >
-              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                🌱 I'm looking for a mentor
-              </span>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                Let experienced members know you'd value their guidance.
-              </p>
-            </button>
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-3 rounded-lg">
+            ⚠️ {error}
           </div>
-        </div>
+        )}
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-
-        <button type="submit" className="btn-primary w-full" disabled={submitting}>
-          {submitting ? "Saving…" : "Join the community"}
+        <button
+          type="submit"
+          className="btn-primary w-full py-2.5 text-xs font-semibold shadow-[0_4px_12px_rgba(94,106,210,0.3)] mt-4"
+          disabled={submitting}
+        >
+          {submitting ? "Saving..." : "Save Domains & Continue to Nexus →"}
         </button>
       </form>
     </div>

@@ -32,6 +32,10 @@ public interface UserRepository extends JpaRepository<User, String> {
             + "and u.topics is not null and u.topics like :like")
     List<User> findTopicFollowers(@Param("authorId") String authorId, @Param("like") String like);
 
+    /** Non-banned members who want email for every new question (regardless of topic). */
+    @Query("select u from User u where u.isBanned = false and u.id <> :authorId and u.notifyAllQuestions = true")
+    List<User> findAllQuestionNotifyUsers(@Param("authorId") String authorId);
+
     List<User> findByVerifyStatusOrderByCreatedAtDesc(String verifyStatus);
 
     @Query(value = """

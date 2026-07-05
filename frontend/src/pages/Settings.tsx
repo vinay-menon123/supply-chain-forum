@@ -18,6 +18,7 @@ export default function Settings() {
   const [topics, setTopics] = useState<string[]>(parseTopics(user?.topics));
   const [openToMentor, setOpenToMentor] = useState(user?.openToMentor ?? false);
   const [seekingMentor, setSeekingMentor] = useState(user?.seekingMentor ?? false);
+  const [notifyAllQuestions, setNotifyAllQuestions] = useState(user?.notifyAllQuestions ?? false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -51,6 +52,7 @@ export default function Settings() {
           topics: formatTopics(topics),
           openToMentor,
           seekingMentor,
+          notifyAllQuestions,
         }),
       });
       updateUser(data.user);
@@ -208,6 +210,30 @@ export default function Settings() {
             Get an email when a new question is posted in these topics.
           </p>
           <TopicPicker selected={topics} onToggle={toggleTopic} />
+        </div>
+
+        {/* Email notification preference */}
+        <div className="card">
+          <span className="label">📬 Email notification preference</span>
+          <button
+            type="button"
+            onClick={() => {
+              setNotifyAllQuestions(!notifyAllQuestions);
+              setSaved(false);
+            }}
+            className={`mt-2 w-full rounded-xl border p-4 text-left text-sm transition ${
+              notifyAllQuestions
+                ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200 dark:bg-indigo-950 dark:ring-indigo-800"
+                : "border-slate-200 hover:border-indigo-300 dark:border-slate-700 dark:hover:border-indigo-700"
+            }`}
+          >
+            <span className="font-semibold text-slate-900 dark:text-slate-100">
+              🔔 Notify me for every new question
+            </span>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              Receive an email whenever a new question is posted — regardless of topic. Leave off to only get emails for your followed topics above.
+            </p>
+          </button>
         </div>
 
         {/* Mentorship */}

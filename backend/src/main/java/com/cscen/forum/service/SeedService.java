@@ -257,6 +257,15 @@ public class SeedService {
         u.setOpenToMentor(mentor);
         u.setSeekingMentor(seeking);
         u.setCreatedAt(Instant.now().minus(25, ChronoUnit.DAYS));
+        
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest("password123".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            u.setPasswordHash(java.util.Base64.getEncoder().encodeToString(hash));
+        } catch (Exception e) {
+            // no-op
+        }
+        
         return users.save(u);
     }
 

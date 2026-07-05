@@ -69,6 +69,13 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-mail</artifactId>
     </dependency>
+    <!-- Azure Blob object storage for uploads (dormant unless
+         AZURE_STORAGE_CONNECTION_STRING is set; needed to run >1 replica). -->
+    <dependency>
+      <groupId>com.azure</groupId>
+      <artifactId>azure-storage-blob</artifactId>
+      <version>12.28.1</version>
+    </dependency>
   </dependencies>
 
   <build>
