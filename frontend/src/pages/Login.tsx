@@ -77,6 +77,13 @@ export default function Login() {
         return;
       }
 
+      // Server couldn't send the code (e.g. email temporarily unavailable). Don't
+      // advance to the OTP step — surface the message so the user can retry.
+      if (!data.success) {
+        setError(data.message || "We couldn't send your verification code. Please try again shortly.");
+        return;
+      }
+
       let msg = data.message;
       if (data.devOtp) {
         msg += `. Dev Mode OTP code: ${data.devOtp} (Auto-filled)`;

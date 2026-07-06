@@ -66,10 +66,11 @@ original Node/Express/Prisma backend, which now lives only in git history.)
 
 - **Auth:** **email + password with an email OTP** (2-step) — `AuthController` `/send-otp`,
   `/register`, `/login`. OTP is a 6-digit code, single-use, **5-min TTL** (`otpStorage`, in-memory),
-  emailed via `MailService`. When SMTP is off *or auth fails*, the API **falls open** to a
-  "(Simulated)" response that returns a `devOtp` for local testing. JWT Bearer. Onboarding at
-  `/welcome` (topic selection). (Google Sign-In was removed; `GOOGLE_CLIENT_ID` is now unused and
-  `/api/auth/config` returns an empty client id.)
+  emailed via `MailService`. When mail can't send, the response includes a `devOtp` **only if
+  `EXPOSE_DEV_OTP=true`** (local); in prod (flag off) it **fails closed** (`success:false`, no code
+  leak) so verification can't be bypassed. JWT Bearer. Onboarding at `/welcome` (topic selection).
+  (Google Sign-In was removed; `GOOGLE_CLIENT_ID` is now unused and `/api/auth/config` returns an
+  empty client id.)
 - **Member types (6, from CSCEN model):** Academician, Professional, Researcher, Student,
   Industry Partner, Startup & Tech Partner. Phone + organization **optional**. Editable any time
   at **`/settings`** (change your "role"/member type, headline, org, phone, LinkedIn, bio, topics,
@@ -155,7 +156,7 @@ backend/
     security/  JwtService, CurrentUser (optionalUserId/requireUserId/requireUser/requireActiveUser/requireAdmin)
     service/   Json (DTO shaping incl. listing()), QuestionService (TAGS×11, toJson, tagLabel), ModerationService (wordlist||AI),
                AiModerationClient (Anthropic SDK — moderation + isSupplyChainRelevant verify),
-               MailService (shared JavaMail wrapper, no-op until SMTP), DigestService (@Scheduled + manual test),
+               MailService (Resend HTTP API preferred + JavaMail SMTP fallback, no-op until configured), DigestService (@Scheduled + manual test),
                NotificationService (@Async new-question topic emails), SeedService (idempotent starter content),
                UploadStorage (interface) + LocalUploadStorage (default, ./uploads) + AzureBlobUploadStorage (env-gated object storage)
     web/       AuthController (google/profile/me — profile now takes topics/linkedin/headline/bio + runs verify),
@@ -190,15 +191,25 @@ k8s/  00-namespace, 01-secrets (dev placeholders), 02-postgres, 03-backend (imag
 | `ADMIN_EMAILS` | no | comma-separated; default `vinay.menon2707@gmail.com`. Editable parameter. |
 | `ANTHROPIC_API_KEY` | no | enables AI moderation. Unset → wordlist only (fails open). |
 | `ANTHROPIC_MODEL` | no | default `claude-opus-4-8`. Set `claude-haiku-4-5` for cheaper/faster. |
-| `SMTP_HOST`/`_PORT`/`_USER`/`_PASS`/`_FROM` | recommended | Powers **all** email: **OTP sign-in**, weekly digest, topic/all-question, DM, and marketplace notifications. Unset → email is a no-op and OTP falls back to a `devOtp` in the API response. |
+| `RESEND_API_KEY` | recommended (prod) | **Preferred email backend.** Sends via the Resend HTTP API over 443, so it works on Railway (which **blocks outbound SMTP** ports 25/465/587 — Gmail SMTP times out there). Set this + `MAIL_FROM` and all email works. Takes priority over SMTP when both are set. |
+| `MAIL_FROM` | with Resend | Sender address. For Resend it **must be a verified-domain address** (or `onboarding@resend.dev` while testing) or Resend returns 403. Falls back to `SMTP_FROM` when unset. |
+| `SMTP_HOST`/`_PORT`/`_USER`/`_PASS`/`_FROM` | fallback | SMTP backend for hosts that allow it. Powers the same email set. **On Railway SMTP is blocked → use `RESEND_API_KEY` instead.** |
+| `EXPOSE_DEV_OTP` | no | **Default `false`.** When `true` (local `docker-compose` only), an OTP that couldn't be emailed is returned as `devOtp` in the API response for testing. **Never set in prod** — with it off, if email fails the API **fails closed** (no code leak) instead of exposing the OTP. |
 | `APP_URL` | no | used in email links. Prod = the Railway URL. |
 | `AZURE_STORAGE_CONNECTION_STRING` | no | **Unset → uploads go to local `./uploads` disk** (fine for one instance/Railway). Set it → images upload to Azure Blob instead (`AzureBlobUploadStorage`), returning absolute blob URLs. This is the config-only switch that unblocks running multiple replicas (local disk isn't shared). Relaxed-binds to `azure.storage.connection-string`. |
 | `AZURE_STORAGE_CONTAINER` | no | default `forum-uploads`. Blob container name; auto-created (public-blob read) on first boot when Azure storage is enabled. |
 
-> **Gmail SMTP gotcha:** `SMTP_USER=…@gmail.com` needs a **16-char App Password** for `SMTP_PASS`
-> (Google account → 2-Step Verification → App passwords), **not** the normal account password.
-> A normal password is rejected with `Authentication failed` (535) and OTP silently falls back to
-> the simulated `devOtp`. Compose auto-loads the root `.env`; restart the backend after changing it.
+> **Email on Railway = Resend, not SMTP.** Railway (like most PaaS) **blocks outbound SMTP ports**,
+> so `smtp.gmail.com:587` fails with a `MailConnectException` connection timeout — no App Password
+> fixes it. Use `RESEND_API_KEY` + `MAIL_FROM` (Resend sends over HTTPS/443). `MailService` prefers
+> Resend when the key is set and falls back to SMTP otherwise. **Local Gmail SMTP gotcha (still
+> applies to compose):** `SMTP_USER=…@gmail.com` needs a **16-char App Password** for `SMTP_PASS`
+> (Google → 2-Step Verification → App passwords), not the normal password (else `535` auth failure).
+> Compose auto-loads the root `.env`; restart the backend after changing it.
+>
+> **OTP fail-open is now gated.** When mail can't send, the API only returns a `devOtp` if
+> `EXPOSE_DEV_OTP=true` (local); in prod (flag off) it **fails closed** so email verification can't be
+> bypassed. (Before this fix, prod leaked the OTP in the response whenever SMTP wasn't working.)
 
 **Two optional switches to turn on later (in Railway Variables):**
 1. AI moderation → set `ANTHROPIC_API_KEY`.

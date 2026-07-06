@@ -72,6 +72,10 @@ public class AuthController {
     private final AiModerationClient ai;
     private final MailService mailService;
     private final List<String> adminEmails;
+    // Dev-only convenience: when true (local), an OTP that couldn't be emailed is
+    // returned in the API response so testing needs no inbox. MUST stay false in
+    // production — otherwise the "email verification" is trivially bypassable.
+    private final boolean exposeDevOtp;
 
     public AuthController(UserRepository users, JwtService jwtService,
                           CurrentUser currentUser, AiModerationClient ai,
@@ -81,6 +85,7 @@ public class AuthController {
         this.currentUser = currentUser;
         this.ai = ai;
         this.mailService = mailService;
+        this.exposeDevOtp = env.getProperty("EXPOSE_DEV_OTP", Boolean.class, false);
         this.adminEmails = Arrays.stream(env.getProperty("ADMIN_EMAILS", "").split(","))
                 .map(e -> e.trim().toLowerCase(Locale.ROOT))
                 .filter(e -> !e.isEmpty())
@@ -127,13 +132,24 @@ public class AuthController {
         
         if (mailSent) {
             return Map.of("success", true, "message", "Verification code sent to " + email);
-        } else {
+        }
+
+        // Mail wasn't sent (email disabled or the send failed).
+        if (exposeDevOtp) {
+            // Local/dev only: hand the code back so testing needs no real inbox.
             return Map.of(
                 "success", true,
                 "message", "Verification code sent to " + email + " (Simulated)",
                 "devOtp", code
             );
         }
+        // Production: never leak the code. Fail closed so verification can't be bypassed.
+        log.warn("OTP email to {} could not be sent and EXPOSE_DEV_OTP is off — failing closed", email);
+        return Map.of(
+            "success", false,
+            "message", "We couldn't send a verification code to " + email
+                + " right now. Please try again in a few minutes."
+        );
     }
 
     public record RegisterRequest(

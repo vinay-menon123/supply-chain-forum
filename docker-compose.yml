@@ -35,6 +35,12 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-noreply@cscen.local}
+      # Preferred email backend: Resend HTTP API (works where SMTP ports are blocked, e.g. Railway).
+      # MAIL_FROM must be a Resend-verified sender (or onboarding@resend.dev while testing).
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      # Local dev only: return un-sent OTPs in the API response for testing. NEVER set on prod.
+      EXPOSE_DEV_OTP: ${EXPOSE_DEV_OTP:-true}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_API_MODEL: ${GEMINI_API_MODEL:-gemini-2.5-flash}
       NEWS_SYNC_CRON: ${NEWS_SYNC_CRON:-0 30 23 * * *}
