@@ -253,7 +253,11 @@ is a fresh `CREATE TABLE IF NOT EXISTS` (kind/category/title/description/locatio
 
 - **Railway:** push to `master` → auto-build root `Dockerfile` → deploy. Verify with
   `/api/health` (`{"status":"ok"}`) and check the content-hashed bundle name changed
-  (`index-XXXX.js`) to confirm the new build actually rolled out.
+  (`index-XXXX.js`) to confirm the new build actually rolled out. **Rollout gotcha:** the new
+  static bundle starts being served ~40–60s *before* the backend fully accepts requests, so an API
+  check fired the instant the bundle hash changes can return a transient `500 {"error":"Something
+  went wrong"}` (seen twice). **Wait ~60s after the hash change before trusting API checks** — it
+  clears on its own; it is not a code bug.
 - **k8s (local):** mutable tags (`:latest`/`:v3`) got stale on kind nodes **twice**. Always
   **bump the versioned tag** (`vN`) in `k8s/03-backend.yaml` + `04-frontend.yaml`, rebuild,
   `docker tag … :vN`, `kubectl apply`, wait for rollout. Current tag: **v4**.
