@@ -42,6 +42,16 @@ export default function Login() {
   const [sendingLoginOtp, setSendingLoginOtp] = useState(false);
   const [loginOtpSent, setLoginOtpSent] = useState(false);
 
+  // Forgot-password flow (a mode within the Login tab)
+  const [forgotMode, setForgotMode] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetOtp, setResetOtp] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [resetOtpSent, setResetOtpSent] = useState(false);
+  const [sendingResetOtp, setSendingResetOtp] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
   function toggleRegTopic(value: string) {
     setRegTopics((prev) =>
       prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value]
@@ -193,6 +203,104 @@ export default function Login() {
     }
   }
 
+  async function handleSendResetOtp() {
+    if (!resetEmail) {
+      setError("Please enter your account email first");
+      return;
+    }
+    setError("");
+    setSuccess("");
+    setSendingResetOtp(true);
+    try {
+      const data = await api<{ success: boolean; message: string; devOtp?: string; notRegistered?: boolean }>(
+        "/auth/send-otp",
+        { method: "POST", body: JSON.stringify({ email: resetEmail, intent: "reset" }) }
+      );
+
+      // No account for this email → send them to Create Account instead.
+      if (data.notRegistered) {
+        setForgotMode(false);
+        setActiveTab("register");
+        setRegEmail(resetEmail);
+        setError(`No account found for ${resetEmail}. Please create an account instead.`);
+        return;
+      }
+      if (!data.success) {
+        setError(data.message || "We couldn't send your reset code. Please try again shortly.");
+        return;
+      }
+
+      let msg = data.message;
+      if (data.devOtp) {
+        msg += `. Dev Mode OTP code: ${data.devOtp} (Auto-filled)`;
+        setResetOtp(data.devOtp);
+      }
+      setSuccess(msg);
+      setResetOtpSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send reset code");
+    } finally {
+      setSendingResetOtp(false);
+    }
+  }
+
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (!resetEmail || !resetOtpSent) {
+      setError("Please request a reset code first");
+      return;
+    }
+    if (!resetOtp) {
+      setError("Enter the verification code sent to your email");
+      return;
+    }
+    if (!resetPassword || resetPassword.length < 6) {
+      setError("New password must be at least 6 characters");
+      return;
+    }
+    if (resetPassword !== resetConfirm) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    setResetting(true);
+    try {
+      const data = await api<{ token: string; user: User }>("/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({ email: resetEmail, otp: resetOtp, newPassword: resetPassword }),
+      });
+      login(data.token, data.user);
+      navigate(data.user.topics && data.user.topics.trim().length > 0 ? from : "/welcome", {
+        replace: true,
+        state: { from },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reset password");
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  function openForgot() {
+    setForgotMode(true);
+    setError("");
+    setSuccess("");
+    setResetEmail(loginEmail);
+    setResetOtp("");
+    setResetPassword("");
+    setResetConfirm("");
+    setResetOtpSent(false);
+  }
+
+  function closeForgot() {
+    setForgotMode(false);
+    setError("");
+    setSuccess("");
+  }
+
   return (
     <div className="relative mx-auto max-w-lg pt-8 pb-16 px-4">
       {/* Background aurora blobs */}
@@ -213,6 +321,7 @@ export default function Login() {
         <button
           onClick={() => {
             setActiveTab("signin");
+            setForgotMode(false);
             setError("");
             setSuccess("");
           }}
@@ -227,6 +336,7 @@ export default function Login() {
         <button
           onClick={() => {
             setActiveTab("register");
+            setForgotMode(false);
             setError("");
             setSuccess("");
           }}
@@ -255,6 +365,100 @@ export default function Login() {
         )}
 
         {activeTab === "signin" ? (
+          forgotMode ? (
+          <form onSubmit={handleResetPassword} className="space-y-4 text-left">
+            <div>
+              <button
+                type="button"
+                onClick={closeForgot}
+                className="text-[11px] text-[#8A8F98] hover:text-white transition-colors"
+              >
+                ← Back to login
+              </button>
+              <p className="text-sm font-semibold text-white mt-2">Reset your password</p>
+              <p className="text-[11px] text-[#8A8F98] mt-1">
+                Enter your account email, verify the code we email you, then choose a new password.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-white uppercase tracking-wider mb-1.5">
+                Email
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  className="flex-1 bg-[#0F0F12] border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#5E6AD2] focus:ring-1 focus:ring-[#5E6AD2]/50 transition-all"
+                  required
+                />
+                <button
+                  type="button"
+                  disabled={sendingResetOtp || !resetEmail}
+                  onClick={handleSendResetOtp}
+                  className="bg-white/5 hover:bg-white/10 text-white border border-white/10 py-2 px-3 rounded-lg text-xs font-semibold disabled:opacity-40 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  {sendingResetOtp ? "Sending..." : resetOtpSent ? "Resend" : "Send code"}
+                </button>
+              </div>
+            </div>
+
+            {resetOtpSent && (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold text-white uppercase tracking-wider mb-1.5">
+                    Verification Code (OTP)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={resetOtp}
+                    onChange={(e) => setResetOtp(e.target.value)}
+                    placeholder="Enter 6-digit OTP code"
+                    className="w-full bg-[#0F0F12] border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#5E6AD2] focus:ring-1 focus:ring-[#5E6AD2]/50 transition-all text-center tracking-widest font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-white uppercase tracking-wider mb-1.5">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={resetPassword}
+                    onChange={(e) => setResetPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    className="w-full bg-[#0F0F12] border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#5E6AD2] focus:ring-1 focus:ring-[#5E6AD2]/50 transition-all"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-white uppercase tracking-wider mb-1.5">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={resetConfirm}
+                    onChange={(e) => setResetConfirm(e.target.value)}
+                    placeholder="Re-enter new password"
+                    className="w-full bg-[#0F0F12] border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#5E6AD2] focus:ring-1 focus:ring-[#5E6AD2]/50 transition-all"
+                    required
+                  />
+                </div>
+              </>
+            )}
+
+            <button
+              type="submit"
+              disabled={resetting || !resetOtpSent}
+              className="btn-primary w-full py-2.5 text-xs font-semibold shadow-[0_4px_12px_rgba(94,106,210,0.3)] mt-6 disabled:opacity-40"
+            >
+              {resetting ? "Resetting..." : "Reset password & sign in"}
+            </button>
+          </form>
+          ) : (
           <form onSubmit={handleLogin} className="space-y-4 text-left">
             <div>
               <label className="block text-xs font-semibold text-white uppercase tracking-wider mb-1.5">
@@ -295,6 +499,15 @@ export default function Login() {
                 className="w-full bg-[#0F0F12] border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#5E6AD2] focus:ring-1 focus:ring-[#5E6AD2]/50 transition-all"
                 required
               />
+              <div className="mt-1.5 text-right">
+                <button
+                  type="button"
+                  onClick={openForgot}
+                  className="text-[11px] font-medium text-accent hover:text-indigo-300 transition-colors"
+                >
+                  Forgot password?
+                </button>
+              </div>
             </div>
 
             {loginOtpSent && (
@@ -321,6 +534,7 @@ export default function Login() {
               Login
             </button>
           </form>
+          )
         ) : (
           <form onSubmit={handleRegister} className="space-y-4 text-left">
             

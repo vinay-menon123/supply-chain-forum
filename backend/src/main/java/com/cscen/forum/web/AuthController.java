@@ -106,9 +106,11 @@ public class AuthController {
         }
         String email = request.email().trim().toLowerCase(Locale.ROOT);
 
-        // Login flow: don't send a code to an address that has no account. Tell
-        // the client so it can redirect the user to Create Account instead.
-        if ("login".equalsIgnoreCase(request.intent()) && users.findByEmail(email).isEmpty()) {
+        // Login / password-reset flows: don't send a code to an address that has no
+        // account. Tell the client so it can redirect the user to Create Account instead.
+        boolean requiresExistingAccount = "login".equalsIgnoreCase(request.intent())
+                || "reset".equalsIgnoreCase(request.intent());
+        if (requiresExistingAccount && users.findByEmail(email).isEmpty()) {
             return Map.of(
                 "success", false,
                 "notRegistered", true,
@@ -254,6 +256,37 @@ public class AuthController {
         }
 
         return Map.of("token", jwtService.sign(user.getId()), "user", Json.privateUser(user));
+    }
+
+    public record ResetPasswordRequest(String email, String otp, String newPassword) {}
+
+    /**
+     * Forgot-password: verify an email OTP (proving inbox ownership) and set a new
+     * password. On success the user is signed in immediately (returns a token),
+     * since they've just proven both email ownership and knowledge of the new secret.
+     */
+    @PostMapping("/reset-password")
+    public Map<String, Object> resetPassword(@RequestBody ResetPasswordRequest request) {
+        if (request == null || request.email() == null || request.otp() == null
+                || request.newPassword() == null) {
+            throw ApiException.badRequest("Missing email, verification code, or new password");
+        }
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+
+        // Validate the new password BEFORE consuming the single-use OTP, so a weak
+        // password doesn't burn the code and force the user to request another.
+        if (request.newPassword().length() < 6) {
+            throw ApiException.badRequest("New password must be at least 6 characters");
+        }
+        User user = users.findByEmail(email)
+                .orElseThrow(() -> ApiException.badRequest("No account is registered with " + email));
+        if (!consumeOtp(email, request.otp())) {
+            throw ApiException.badRequest("Invalid or expired verification code (OTP)");
+        }
+
+        user.setPasswordHash(hashPassword(request.newPassword()));
+        User saved = users.save(user);
+        return Map.of("token", jwtService.sign(saved.getId()), "user", Json.privateUser(saved));
     }
 
     private String hashPassword(String password) {

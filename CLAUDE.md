@@ -65,12 +65,17 @@ original Node/Express/Prisma backend, which now lives only in git history.)
 ## 4. Features (all shipped)
 
 - **Auth:** **email + password with an email OTP** (2-step) — `AuthController` `/send-otp`,
-  `/register`, `/login`. OTP is a 6-digit code, single-use, **5-min TTL** (`otpStorage`, in-memory),
-  emailed via `MailService`. When mail can't send, the response includes a `devOtp` **only if
-  `EXPOSE_DEV_OTP=true`** (local); in prod (flag off) it **fails closed** (`success:false`, no code
-  leak) so verification can't be bypassed. JWT Bearer. Onboarding at `/welcome` (topic selection).
-  (Google Sign-In was removed; `GOOGLE_CLIENT_ID` is now unused and `/api/auth/config` returns an
-  empty client id.)
+  `/register`, `/login`, `/reset-password`. OTP is a 6-digit code, single-use, **5-min TTL**
+  (`otpStorage`, in-memory), emailed via `MailService`. When mail can't send, the response includes a
+  `devOtp` **only if `EXPOSE_DEV_OTP=true`** (local); in prod (flag off) it **fails closed**
+  (`success:false`, no code leak) so verification can't be bypassed. JWT Bearer. Onboarding at
+  `/welcome` (topic selection). (Google Sign-In was removed; `GOOGLE_CLIENT_ID` is now unused and
+  `/api/auth/config` returns an empty client id.)
+- **Forgot password:** "Forgot password?" on the Login page opens a reset panel — email →
+  `/send-otp {intent:"reset"}` (rejects unregistered emails with `notRegistered`, bouncing to Create
+  Account) → `/reset-password {email, otp, newPassword}`. Verifies the OTP (password length checked
+  **before** consuming the single-use code), sets the new SHA-256 hash, and **auto-signs-in** (returns
+  a token). Same email dependency as sign-in: works locally (devOtp) and in prod once Resend is set.
 - **Member types (6, from CSCEN model):** Academician, Professional, Researcher, Student,
   Industry Partner, Startup & Tech Partner. Phone + organization **optional**. Editable any time
   at **`/settings`** (change your "role"/member type, headline, org, phone, LinkedIn, bio, topics,
