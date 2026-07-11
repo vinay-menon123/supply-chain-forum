@@ -21,10 +21,10 @@ const FEATURES = [
     to: "/questions",
   },
   {
-    emoji: "🏬",
-    title: "Logistics Marketplace",
-    text: "List or find warehouse space, freight capacity, cargo gear, and logistics services — deal directly with verified members.",
-    to: "/marketplace",
+    emoji: "💼",
+    title: "Careers & Jobs",
+    text: "Browse supply-chain roles across planning, procurement, warehousing, and logistics — or post openings to a network of verified practitioners.",
+    to: "/jobs",
   },
   {
     emoji: "🤝",
@@ -67,9 +67,9 @@ const ROLE_DETAILS: Record<string, { title: string; subtitle: string; emoji: str
   },
   INDUSTRY_PARTNER: {
     title: "Industry Partner",
-    subtitle: "Capacity Coordination & Asset Sharing",
+    subtitle: "Capacity Coordination & Hiring",
     emoji: "🏭",
-    details: "Industry Partners represent logistics providers, warehouse operators, and fleet carriers. They utilize the marketplace to share capacity, post asset listings, and find freight opportunities directly within the verified network."
+    details: "Industry Partners represent logistics providers, warehouse operators, and fleet carriers. They post openings on the jobs board, share operational playbooks and templates, and connect with talent directly within the verified network."
   },
   STARTUP_TECH_PARTNER: {
     title: "Startup & Tech Partner",
@@ -135,9 +135,9 @@ function BentoCard({ children, className = "", spanClass = "" }: { children: Rea
     <div 
       ref={cardRef}
       onMouseMove={handleMouseMove}
-      className={`card card-hover spotlight-card ${className} ${spanClass}`}
+      className={`card card-hover spotlight-card w-full min-w-0 overflow-hidden ${className} ${spanClass}`}
     >
-      <div className="relative z-10 h-full flex flex-col justify-between">
+      <div className="relative z-10 h-full flex flex-col justify-between w-full min-w-0 overflow-hidden">
         {children}
       </div>
     </div>
@@ -322,23 +322,23 @@ function InteractiveDemo({ realQuestions }: { realQuestions: Question[] }) {
             className="flex-1 flex flex-col justify-between animate-fade-in cursor-pointer group/terminal"
           >
             <div>
-              <div className="flex items-center justify-between mb-3 border-b border-white/[0.06] pb-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 border-b border-white/[0.06] pb-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[10px] font-bold text-white">
+                  <div className="w-6 h-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
                     {activeQuestion?.avatar || "PS"}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-semibold text-white">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-semibold text-white truncate max-w-[100px] sm:max-w-none">
                         {activeQuestion?.author || "Priya Sharma"}
                       </span>
-                      <span className="text-[8px] bg-accent/15 text-accent border border-accent/30 font-bold px-1 py-0.2 rounded">
+                      <span className="text-[8px] bg-accent/15 text-accent border border-accent/30 font-bold px-1 py-0.2 rounded flex-shrink-0">
                         ✓ VERIFIED
                       </span>
                     </div>
                   </div>
                 </div>
-                <span className="text-[9px] text-accent bg-accent/5 border border-accent/20 px-1.5 py-0.5 rounded font-mono">
+                <span className="text-[9px] text-accent bg-accent/5 border border-accent/20 px-1.5 py-0.5 rounded font-mono self-start sm:self-auto flex-shrink-0">
                   {selectedTag}
                 </span>
               </div>
@@ -395,6 +395,8 @@ export default function Landing() {
   const [submittingContact, setSubmittingContact] = useState(false);
   const [contactSuccess, setContactSuccess] = useState(false);
   const [contactError, setContactError] = useState("");
+
+
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
@@ -506,16 +508,16 @@ export default function Landing() {
           </h2>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-6 lg:grid-rows-2">
+        <div className="grid gap-4 lg:grid-cols-6 lg:grid-rows-2 w-full min-w-0">
           {/* Hero Bento: Interactive Simulator (spans 4 cols, 2 rows) */}
-          <div className="lg:col-span-4 lg:row-span-2">
+          <div className="lg:col-span-4 lg:row-span-2 w-full min-w-0">
             <BentoCard className="p-0 border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.01]">
               <InteractiveDemo realQuestions={realQuestions} />
             </BentoCard>
           </div>
 
           {/* Stat Bento Card (spans 2 cols) */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 w-full min-w-0">
             <BentoCard className="bg-gradient-to-b from-white/[0.06] to-white/[0.01] p-6 justify-between flex-col h-full min-h-[160px]">
               <div>
                 <span className="text-[10px] font-mono uppercase tracking-wider text-[#8A8F98]">
@@ -534,22 +536,22 @@ export default function Landing() {
           </div>
 
           {/* Quick Action Bento Card (spans 2 cols) */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 w-full min-w-0">
             <BentoCard className="bg-gradient-to-b from-white/[0.06] to-white/[0.01] p-6 justify-between flex-col h-full min-h-[160px]">
               <div>
                 <span className="text-[10px] font-mono uppercase tracking-wider text-accent">
                   Resource Hub
                 </span>
                 <h4 className="text-sm font-semibold text-white mt-1.5">
-                  Marketplace Platform
+                  Templates Library
                 </h4>
                 <p className="text-xs text-[#8A8F98] mt-1 leading-relaxed">
-                  List storage facilities, vehicle fleets, or transport services directly.
+                  Download practitioner-built S&amp;OP decks, RFQ sheets, and planning models — or share your own.
                 </p>
               </div>
               <div className="mt-4">
-                <Link to="/marketplace" className="text-xs font-semibold text-white hover:text-accent transition-colors flex items-center gap-1">
-                  Browse Listings <span>→</span>
+                <Link to="/templates" className="text-xs font-semibold text-white hover:text-accent transition-colors flex items-center gap-1">
+                  Browse Templates <span>→</span>
                 </Link>
               </div>
             </BentoCard>

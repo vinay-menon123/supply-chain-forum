@@ -142,11 +142,6 @@ export default function Profile() {
                   ✅ Verified
                 </span>
               )}
-              {user.pro && (
-                <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                  ⭐ Pro Supplier
-                </span>
-              )}
               {user.role === "ADMIN" && (
                 <span className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-2 py-0.5 text-xs font-bold text-white shadow-sm">
                   🛡️ ADMIN

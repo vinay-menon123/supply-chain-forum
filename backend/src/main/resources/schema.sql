@@ -153,3 +153,53 @@ ALTER TABLE "Vote" ALTER COLUMN "questionId" DROP NOT NULL;
 ALTER TABLE "Vote" ADD COLUMN IF NOT EXISTS "commentId" TEXT REFERENCES "Comment"(id) ON DELETE CASCADE;
 CREATE UNIQUE INDEX IF NOT EXISTS "Vote_userId_commentId_key" ON "Vote"("userId", "commentId");
 
+-- ── In-app notifications (navbar bell): answers, replies, accepts, @mentions ──
+CREATE TABLE IF NOT EXISTS "Notification" (
+    id            TEXT PRIMARY KEY,
+    "userId"      TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,   -- recipient
+    "actorId"     TEXT REFERENCES "User"(id) ON DELETE SET NULL,           -- who triggered it
+    type          TEXT NOT NULL,          -- ANSWER | REPLY | ACCEPT | MENTION
+    "questionId"  TEXT,                   -- deep-link target (nullable)
+    "commentId"   TEXT,
+    text          TEXT NOT NULL,
+    "readAt"      TIMESTAMP(3),
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS "Notification_userId_createdAt_idx" ON "Notification"("userId", "createdAt");
+CREATE INDEX IF NOT EXISTS "Notification_userId_readAt_idx" ON "Notification"("userId", "readAt");
+
+-- ── Jobs board ──
+CREATE TABLE IF NOT EXISTS "Job" (
+    id               TEXT PRIMARY KEY,
+    title            TEXT NOT NULL,
+    company          TEXT NOT NULL,
+    location         TEXT,
+    "employmentType" TEXT NOT NULL DEFAULT 'FULL_TIME',  -- FULL_TIME | PART_TIME | CONTRACT | INTERNSHIP
+    tag              TEXT NOT NULL DEFAULT 'GENERAL',     -- SCM domain tag
+    description      TEXT NOT NULL,
+    "applyUrl"       TEXT,                                -- external apply link (null → DM poster)
+    salary           TEXT,
+    "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "authorId"       TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS "Job_createdAt_idx" ON "Job"("createdAt");
+
+-- ── Templates / resources library (downloadable files) ──
+CREATE TABLE IF NOT EXISTS "Template" (
+    id              TEXT PRIMARY KEY,
+    title           TEXT NOT NULL,
+    description     TEXT NOT NULL DEFAULT '',
+    category        TEXT NOT NULL DEFAULT 'GENERAL',
+    "fileUrl"       TEXT NOT NULL,
+    "fileName"      TEXT NOT NULL,
+    "fileType"      TEXT,
+    "downloadCount" INTEGER NOT NULL DEFAULT 0,
+    "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "authorId"      TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS "Template_createdAt_idx" ON "Template"("createdAt");
+
+-- Template upvotes reuse the Vote table (one nullable FK per votable kind).
+ALTER TABLE "Vote" ADD COLUMN IF NOT EXISTS "templateId" TEXT REFERENCES "Template"(id) ON DELETE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS "Vote_userId_templateId_key" ON "Vote"("userId", "templateId");
+

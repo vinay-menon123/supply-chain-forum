@@ -31,4 +31,13 @@ public interface VoteRepository extends JpaRepository<Vote, String> {
 
     @Query("select v.commentId, count(v) from Vote v where v.commentId in :ids group by v.commentId")
     List<Object[]> countByCommentIds(@Param("ids") Collection<String> ids);
+
+    Optional<Vote> findByUserIdAndTemplateId(String userId, String templateId);
+
+    long countByTemplateId(String templateId);
+
+    List<Vote> findByUserIdAndTemplateIdIn(String userId, Collection<String> templateIds);
+
+    @Query("select v.templateId, count(v) from Vote v where v.templateId in :ids group by v.templateId")
+    List<Object[]> countByTemplateIds(@Param("ids") Collection<String> ids);
 }

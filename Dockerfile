@@ -11,7 +11,7 @@ COPY frontend/ .
 RUN npm run build
 
 # ---- Backend build ----
-FROM maven:3.9-eclipse-temurin-21 AS backend
+FROM maven:3.9-eclipse-temurin-25 AS backend
 WORKDIR /app
 COPY backend/pom.xml ./
 RUN mvn -q -B dependency:go-offline
@@ -19,7 +19,7 @@ COPY backend/src ./src
 RUN mvn -q -B -DskipTests package
 
 # ---- Runtime ----
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 WORKDIR /app
 COPY --from=backend /app/target/forum-backend-1.0.0.jar app.jar
 COPY --from=frontend /fe/dist ./public

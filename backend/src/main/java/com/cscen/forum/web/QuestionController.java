@@ -9,6 +9,7 @@ import com.cscen.forum.repo.QuestionRepository;
 import com.cscen.forum.repo.UserRepository;
 import com.cscen.forum.repo.VoteRepository;
 import com.cscen.forum.security.CurrentUser;
+import com.cscen.forum.service.InAppNotifier;
 import com.cscen.forum.service.Json;
 import com.cscen.forum.service.ModerationService;
 import com.cscen.forum.service.NotificationService;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -49,13 +51,14 @@ public class QuestionController {
     private final QuestionService questionService;
     private final ModerationService moderation;
     private final NotificationService notifications;
+    private final InAppNotifier inApp;
     private final UploadStorage uploads;
     private final CurrentUser currentUser;
 
     public QuestionController(QuestionRepository questions, CommentRepository comments,
                               VoteRepository votes, UserRepository users,
                               QuestionService questionService, ModerationService moderation,
-                              NotificationService notifications,
+                              NotificationService notifications, InAppNotifier inApp,
                               UploadStorage uploads, CurrentUser currentUser) {
         this.questions = questions;
         this.comments = comments;
@@ -64,6 +67,7 @@ public class QuestionController {
         this.questionService = questionService;
         this.moderation = moderation;
         this.notifications = notifications;
+        this.inApp = inApp;
         this.uploads = uploads;
         this.currentUser = currentUser;
     }
@@ -123,6 +127,8 @@ public class QuestionController {
 
         // Email members who follow this topic (async, no-op when SMTP is off)
         notifications.notifyNewQuestion(question, user, QuestionService.tagLabel(tag));
+        // In-app @mentions in the question body
+        inApp.mentions(cleanBody, user, question.getId(), null, null);
 
         return ResponseEntity.status(201).body(questionService.toJson(question, user.getId()));
     }
@@ -251,14 +257,17 @@ public class QuestionController {
         String cleanBody = body == null ? "" : body.trim();
         if (cleanBody.isEmpty()) throw ApiException.badRequest("Comment cannot be empty");
         if (cleanBody.length() > 5000) throw ApiException.badRequest("Comment is too long");
-        if (!questions.existsById(id)) throw ApiException.notFound("Question not found");
+        Question question = questions.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Question not found"));
 
+        String parentAuthorId = null;
         if (parentId != null) {
             Comment parent = comments.findById(parentId)
                     .orElseThrow(() -> ApiException.notFound("Answer not found"));
             if (parent.getParentId() != null) {
                 throw ApiException.badRequest("Only answers can have comments");
             }
+            parentAuthorId = parent.getAuthorId();
         }
 
         String violation = moderation.rejectIfProfane(user, "comment", cleanBody);
@@ -271,6 +280,18 @@ public class QuestionController {
         comment.setQuestionId(id);
         comment.setParentId(parentId);
         comments.save(comment);
+
+        // In-app notifications: a reply pings the answer's author; a top-level
+        // answer pings the question's author. @mentions ping anyone else named.
+        Set<String> notified = new HashSet<>();
+        if (parentAuthorId != null) {
+            inApp.replied(parentAuthorId, user, id, comment.getId());
+            notified.add(parentAuthorId);
+        } else {
+            inApp.answered(question.getAuthorId(), user, id);
+            notified.add(question.getAuthorId());
+        }
+        inApp.mentions(cleanBody, user, id, comment.getId(), notified);
 
         return ResponseEntity.status(201).body(Json.comment(comment, user));
     }
@@ -311,10 +332,11 @@ public class QuestionController {
         if (commentId.equals(question.getAcceptedCommentId())) {
             question.setAcceptedCommentId(null);
         } else {
-            comments.findById(commentId)
+            Comment accepted = comments.findById(commentId)
                     .filter(c -> c.getQuestionId().equals(id))
                     .orElseThrow(() -> ApiException.notFound("Comment not found"));
             question.setAcceptedCommentId(commentId);
+            inApp.accepted(accepted.getAuthorId(), user, id, commentId);
         }
         questions.save(question);
         response.put("acceptedCommentId", question.getAcceptedCommentId());

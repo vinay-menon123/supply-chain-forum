@@ -19,4 +19,17 @@ public interface UploadStorage {
 
     /** Saves a validated image and returns its public URL, or {@code null} when absent. */
     String saveImage(MultipartFile file);
+
+    /**
+     * Saves a validated document/template file (PDF, Office docs, CSV, ZIP, images)
+     * and returns its public URL, or {@code null} when absent. Used by the templates
+     * library, which accepts richer file types than image uploads.
+     */
+    String saveFile(MultipartFile file);
+
+    /**
+     * Saves raw bytes under a generated name (keeping {@code filename}'s extension)
+     * and returns its public URL. Used by the seeder to create sample template files.
+     */
+    String saveBytes(byte[] data, String filename, String contentType);
 }

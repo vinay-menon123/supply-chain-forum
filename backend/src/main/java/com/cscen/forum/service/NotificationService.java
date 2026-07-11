@@ -1,7 +1,7 @@
 package com.cscen.forum.service;
 
 import com.cscen.forum.model.Event;
-import com.cscen.forum.model.Listing;
+import com.cscen.forum.model.Job;
 import com.cscen.forum.model.Question;
 import com.cscen.forum.model.User;
 import com.cscen.forum.repo.UserRepository;
@@ -92,36 +92,35 @@ public class NotificationService {
         log.info("Notified user {} of new DM from {}", recipient.getUsername(), sender.getUsername());
     }
 
+    /** Emails members who follow the job's domain tag when a new job is posted. */
     @Async
-    public void notifyNewListing(Listing listing, User author) {
+    public void notifyNewJob(Job job, User author, String tagLabel) {
         if (!mail.isEnabled()) {
             return;
         }
-        List<User> recipients = users.findByIsBannedFalse();
+        List<User> recipients = users.findTopicFollowers(author.getId(), "%" + job.getTag() + "%");
         if (recipients.isEmpty()) {
             return;
         }
-        String url = mail.appUrl() + "/marketplace";
+        String url = mail.appUrl() + "/jobs";
+        String where = job.getLocation() == null || job.getLocation().isBlank() ? "" : " · " + MailService.escape(job.getLocation());
+        String pay = job.getSalary() == null || job.getSalary().isBlank() ? "" :
+                "<p style=\"color:#334155\"><strong>Compensation:</strong> " + MailService.escape(job.getSalary()) + "</p>";
         String html = """
                 <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
                   <p style="color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:.05em">
-                    New SCM Marketplace Listing</p>
+                    New %s job</p>
                   <h2 style="color:#312e81;margin-top:4px">%s</h2>
-                  <p style="color:#334155">%s posted a new listing in category: <strong>%s</strong></p>
-                  <p style="color:#334155;background:#f8fafc;padding:12px;border-radius:6px;border-left:4px solid #5e6ad2">
-                    %s
-                  </p>
-                  <p><a href="%s" style="background:#5e6ad2;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">View Listing →</a></p>
-                  <p style="color:#94a3b8;font-size:12px">You're getting this because you're a member of CSCE Nexus SCM Marketplace.</p>
+                  <p style="color:#334155"><strong>%s</strong>%s</p>
+                  %s
+                  <p><a href="%s" style="background:#5e6ad2;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">View &amp; apply →</a></p>
+                  <p style="color:#94a3b8;font-size:12px">You're getting this because you follow %s on CSCE Nexus. Manage your topics in Settings.</p>
                 </div>
-                """.formatted(MailService.escape(listing.getTitle()),
-                MailService.escape(author.getName() == null ? author.getUsername() : author.getName()),
-                MailService.escape(listing.getCategory()),
-                MailService.escape(listing.getDescription().length() > 120 ? listing.getDescription().substring(0, 117) + "..." : listing.getDescription()),
-                url);
+                """.formatted(MailService.escape(tagLabel), MailService.escape(job.getTitle()),
+                MailService.escape(job.getCompany()), where, pay, url, MailService.escape(tagLabel));
 
-        int sent = mail.send(recipients, "New SCM Marketplace Listing: " + listing.getTitle(), html);
-        log.info("Notified {} member(s) of new SCM Marketplace listing", sent);
+        int sent = mail.send(recipients, "New " + tagLabel + " job on CSCE Nexus: " + job.getTitle(), html);
+        log.info("Notified {} member(s) of new {} job", sent, job.getTag());
     }
 
     private static final DateTimeFormatter ICS_STAMP =

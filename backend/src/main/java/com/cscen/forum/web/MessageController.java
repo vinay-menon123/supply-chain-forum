@@ -23,20 +23,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/messages")
 public class MessageController {
-
-    // Anti-disintermediation: on the free plan we hide phone numbers and emails
-    // shared in chat so the first real connection happens on-platform. PRO members
-    // can exchange contact details freely.
-    private static final Pattern EMAIL_RE =
-            Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
-    private static final Pattern PHONE_RE =
-            Pattern.compile("(?:\\+?\\d[\\d\\s().-]{6,}\\d)");
 
     private final MessageRepository messages;
     private final UserRepository users;
@@ -149,23 +140,13 @@ public class MessageController {
         String violation = moderation.rejectIfProfane(me, "message", body);
         if (violation != null) throw ApiException.badRequest(violation);
 
-        // Free members can't share raw contact details in chat (keeps the deal on-platform).
-        String stored = me.isPro() ? body : redactContacts(body);
-
-        Message message = messages.save(Message.create(me.getId(), partner.getId(), stored));
-        notifications.notifyNewMessage(me, partner, stored);
+        Message message = messages.save(Message.create(me.getId(), partner.getId(), body));
+        notifications.notifyNewMessage(me, partner, body);
         Map<String, Object> json = new LinkedHashMap<>();
         json.put("id", message.getId());
         json.put("body", message.getBody());
         json.put("createdAt", message.getCreatedAt());
         json.put("fromMe", true);
         return ResponseEntity.status(201).body(json);
-    }
-
-    /** Masks emails and phone-like number runs so free members can't share raw contacts. */
-    private static String redactContacts(String body) {
-        String out = EMAIL_RE.matcher(body).replaceAll("[contact hidden — upgrade to Pro]");
-        out = PHONE_RE.matcher(out).replaceAll("[contact hidden — upgrade to Pro]");
-        return out;
     }
 }

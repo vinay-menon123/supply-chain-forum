@@ -1,7 +1,9 @@
 package com.cscen.forum.service;
 
 import com.cscen.forum.model.Comment;
-import com.cscen.forum.model.Listing;
+import com.cscen.forum.model.Job;
+import com.cscen.forum.model.Notification;
+import com.cscen.forum.model.Template;
 import com.cscen.forum.model.User;
 
 import java.util.LinkedHashMap;
@@ -60,19 +62,55 @@ public final class Json {
         return json;
     }
 
-    public static Map<String, Object> listing(Listing listing, User author) {
+    public static Map<String, Object> notification(Notification n, User actor) {
         Map<String, Object> json = new LinkedHashMap<>();
-        json.put("id", listing.getId());
-        json.put("kind", listing.getKind());
-        json.put("category", listing.getCategory());
-        json.put("title", listing.getTitle());
-        json.put("description", listing.getDescription());
-        json.put("location", listing.getLocation());
-        json.put("price", listing.getPrice());
-        json.put("size", listing.getSize());
-        json.put("imageUrl", listing.getImageUrl());
-        json.put("createdAt", listing.getCreatedAt());
-        json.put("authorId", listing.getAuthorId());
+        json.put("id", n.getId());
+        json.put("type", n.getType());
+        json.put("text", n.getText());
+        json.put("questionId", n.getQuestionId());
+        json.put("commentId", n.getCommentId());
+        json.put("read", n.getReadAt() != null);
+        json.put("createdAt", n.getCreatedAt());
+        json.put("actor", actor == null ? null : author(actor));
+        return json;
+    }
+
+    public static Map<String, Object> job(Job job, User author) {
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("id", job.getId());
+        json.put("title", job.getTitle());
+        json.put("company", job.getCompany());
+        json.put("location", job.getLocation());
+        json.put("employmentType", job.getEmploymentType());
+        json.put("tag", job.getTag());
+        json.put("description", job.getDescription());
+        json.put("applyUrl", job.getApplyUrl());
+        json.put("salary", job.getSalary());
+        json.put("createdAt", job.getCreatedAt());
+        json.put("authorId", job.getAuthorId());
+        json.put("author", author(author));
+        return json;
+    }
+
+    public static Map<String, Object> template(Template template, User author) {
+        return template(template, author, 0L, false);
+    }
+
+    public static Map<String, Object> template(Template template, User author,
+                                               long voteCount, boolean viewerHasVoted) {
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("id", template.getId());
+        json.put("title", template.getTitle());
+        json.put("description", template.getDescription());
+        json.put("category", template.getCategory());
+        json.put("fileUrl", template.getFileUrl());
+        json.put("fileName", template.getFileName());
+        json.put("fileType", template.getFileType());
+        json.put("downloadCount", template.getDownloadCount());
+        json.put("voteCount", voteCount);
+        json.put("viewerHasVoted", viewerHasVoted);
+        json.put("createdAt", template.getCreatedAt());
+        json.put("authorId", template.getAuthorId());
         json.put("author", author(author));
         return json;
     }

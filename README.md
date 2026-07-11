@@ -9,7 +9,7 @@ share knowledge, chat, and build reputation.
 | Layer     | Tech                                                        |
 | --------- | ----------------------------------------------------------- |
 | Frontend  | React 18, TypeScript, Vite, Tailwind CSS, React Router      |
-| Backend   | Java 21, Spring Boot 3, Spring Data JPA, Maven              |
+| Backend   | Java 25, Spring Boot 3, Spring Data JPA, Maven              |
 | Database  | PostgreSQL 16                                               |
 | Auth      | Google Sign-In (verified emails) + JWT Bearer sessions      |
 | Deploy    | Docker (multi-stage builds), docker-compose, Kubernetes     |
@@ -106,7 +106,7 @@ Every `git push` then redeploys automatically. (No GitHub? `npm i -g @railway/cl
 # 1. Start just the database
 docker compose up -d db
 
-# 2. Backend (http://localhost:4000) — needs JDK 21+ and Maven
+# 2. Backend (http://localhost:4000) — needs JDK 25+ and Maven
 cd backend
 mvn spring-boot:run   # reads DATABASE_URL etc. from the environment; schema.sql runs on boot
 

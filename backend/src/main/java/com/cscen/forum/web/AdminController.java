@@ -18,8 +18,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -100,39 +98,6 @@ public class AdminController {
         user.setVerifyStatus(status);
         users.save(user);
         return Map.of("id", user.getId(), "username", user.getUsername(), "verifyStatus", status);
-    }
-
-    public record PlanRequest(String username, String plan, Integer months) {
-    }
-
-    /**
-     * Grant or revoke a member's marketplace PRO subscription (manual until a
-     * payment gateway is wired). PRO defaults to 12 months unless months given.
-     */
-    @PostMapping("/plan")
-    public Map<String, Object> setPlan(@RequestBody PlanRequest request, HttpServletRequest http) {
-        currentUser.requireAdmin(http);
-        String uname = request == null || request.username() == null ? "" : request.username().trim();
-        User user = users.findByUsername(uname)
-                .orElseThrow(() -> ApiException.notFound("No member with username " + uname));
-
-        String plan = request.plan() != null && request.plan().trim().equalsIgnoreCase("PRO") ? "PRO" : "FREE";
-        user.setPlan(plan);
-        if ("PRO".equals(plan)) {
-            int months = (request.months() == null || request.months() <= 0) ? 12 : request.months();
-            user.setPlanExpiresAt(Instant.now().plus(months * 30L, ChronoUnit.DAYS));
-        } else {
-            user.setPlanExpiresAt(null);
-        }
-        users.save(user);
-
-        Map<String, Object> json = new LinkedHashMap<>();
-        json.put("id", user.getId());
-        json.put("username", user.getUsername());
-        json.put("plan", user.getPlan());
-        json.put("pro", user.isPro());
-        json.put("planExpiresAt", user.getPlanExpiresAt());
-        return json;
     }
 
     /** Users with moderation history, worst offenders first. */

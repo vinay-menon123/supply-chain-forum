@@ -22,6 +22,11 @@ public class LocalUploadStorage implements UploadStorage {
     private static final Set<String> ALLOWED_TYPES =
             Set.of("image/jpeg", "image/png", "image/gif", "image/webp");
 
+    /** Document/template extensions accepted by {@link #saveFile}. */
+    static final Set<String> ALLOWED_DOC_EXT = Set.of(
+            ".pdf", ".xlsx", ".xls", ".docx", ".doc", ".pptx", ".ppt",
+            ".csv", ".txt", ".zip", ".png", ".jpg", ".jpeg");
+
     private final File uploadDir = new File("uploads").getAbsoluteFile();
 
     public LocalUploadStorage() {
@@ -44,6 +49,39 @@ public class LocalUploadStorage implements UploadStorage {
             file.transferTo(new File(uploadDir, name));
         } catch (IOException e) {
             throw new ApiException(500, "Failed to store image");
+        }
+        return "/uploads/" + name;
+    }
+
+    @Override
+    public String saveFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return null;
+        }
+        String original = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+        int dot = original.lastIndexOf('.');
+        String ext = dot >= 0 ? original.substring(dot).toLowerCase() : "";
+        if (!ALLOWED_DOC_EXT.contains(ext)) {
+            throw ApiException.badRequest("Unsupported file type. Allowed: PDF, Excel, Word, PowerPoint, CSV, TXT, ZIP, images");
+        }
+        String name = UUID.randomUUID() + ext;
+        try {
+            file.transferTo(new File(uploadDir, name));
+        } catch (IOException e) {
+            throw new ApiException(500, "Failed to store file");
+        }
+        return "/uploads/" + name;
+    }
+
+    @Override
+    public String saveBytes(byte[] data, String filename, String contentType) {
+        int dot = filename == null ? -1 : filename.lastIndexOf('.');
+        String ext = dot >= 0 ? filename.substring(dot).toLowerCase() : "";
+        String name = UUID.randomUUID() + ext;
+        try {
+            java.nio.file.Files.write(new File(uploadDir, name).toPath(), data);
+        } catch (IOException e) {
+            throw new ApiException(500, "Failed to store file");
         }
         return "/uploads/" + name;
     }

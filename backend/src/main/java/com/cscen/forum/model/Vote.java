@@ -17,6 +17,7 @@ public class Vote {
     private String userId;
     private String questionId;
     private String commentId;
+    private String templateId;
 
     public static Vote create(String userId, String questionId) {
         Vote vote = new Vote();
@@ -34,6 +35,14 @@ public class Vote {
         return vote;
     }
 
+    public static Vote createTemplateVote(String userId, String templateId) {
+        Vote vote = new Vote();
+        vote.id = UUID.randomUUID().toString();
+        vote.userId = userId;
+        vote.templateId = templateId;
+        return vote;
+    }
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public Instant getCreatedAt() { return createdAt; }
@@ -44,4 +53,6 @@ public class Vote {
     public void setQuestionId(String questionId) { this.questionId = questionId; }
     public String getCommentId() { return commentId; }
     public void setCommentId(String commentId) { this.commentId = commentId; }
+    public String getTemplateId() { return templateId; }
+    public void setTemplateId(String templateId) { this.templateId = templateId; }
 }

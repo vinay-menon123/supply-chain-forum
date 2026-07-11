@@ -1,17 +1,25 @@
 package com.cscen.forum.service;
 
 import com.cscen.forum.model.Comment;
+import com.cscen.forum.model.Job;
 import com.cscen.forum.model.Question;
+import com.cscen.forum.model.Template;
 import com.cscen.forum.model.User;
+import com.cscen.forum.model.Vote;
 import com.cscen.forum.repo.CommentRepository;
+import com.cscen.forum.repo.JobRepository;
 import com.cscen.forum.repo.QuestionRepository;
+import com.cscen.forum.repo.TemplateRepository;
 import com.cscen.forum.repo.UserRepository;
+import com.cscen.forum.repo.VoteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Seeds grounded, real-sounding supply-chain discussions so a fresh community
@@ -36,11 +44,21 @@ public class SeedService {
     private final UserRepository users;
     private final QuestionRepository questions;
     private final CommentRepository comments;
+    private final JobRepository jobs;
+    private final TemplateRepository templates;
+    private final VoteRepository votes;
+    private final UploadStorage uploads;
 
-    public SeedService(UserRepository users, QuestionRepository questions, CommentRepository comments) {
+    public SeedService(UserRepository users, QuestionRepository questions, CommentRepository comments,
+                       JobRepository jobs, TemplateRepository templates, VoteRepository votes,
+                       UploadStorage uploads) {
         this.users = users;
         this.comments = comments;
         this.questions = questions;
+        this.jobs = jobs;
+        this.templates = templates;
+        this.votes = votes;
+        this.uploads = uploads;
     }
 
     @Transactional
@@ -236,9 +254,154 @@ public class SeedService {
                 yard. The best analysts I've hired understood why a pick path or a dock schedule is \
                 the way it is - the tech makes sense a lot faster once you've felt the constraint.""", 3);
 
+        int j = seedJobs(priya, daniel, rahul, ana, meera);
+        int t = seedTemplates(priya, daniel, rahul, ana, meera);
+
         String result = "reset " + removed + " placeholder/old members; seeded 5 members, "
-                + q + " questions, " + a + " answers";
+                + q + " questions, " + a + " answers, " + j + " jobs, " + t + " templates";
         return result;
+    }
+
+    // ── Sample jobs board (authored by the seed members; cascade-cleaned on re-seed) ──
+    private int seedJobs(User priya, User daniel, User rahul, User ana, User meera) {
+        int n = 0;
+        n += job(priya, "Senior Demand Planner - FMCG", "Mahindra Logistics", "Mumbai",
+                "FULL_TIME", "DEMAND_PLANNING", "18-26 LPA",
+                """
+                Own the monthly S&OP forecast for a national FMCG portfolio. You'll run \
+                statistical baselines, fold in promo and seasonality signals, and drive the \
+                consensus meeting with sales and finance. 5+ years in demand planning and strong \
+                Excel/planning-tool skills expected.""", 2);
+        n += job(rahul, "Warehouse Operations Manager", "Delhivery", "Bhiwandi, Maharashtra",
+                "FULL_TIME", "WAREHOUSING", "14-20 LPA",
+                """
+                Lead a multi-client fulfilment centre (300k sq ft): slotting, labour planning, \
+                peak readiness and SLA adherence. Hands-on WMS experience and a track record of \
+                running a P&L-sensitive operation required.""", 3);
+        n += job(ana, "Strategic Sourcing Manager - Packaging", "Nestle", "Gurugram",
+                "FULL_TIME", "PROCUREMENT", "20-28 LPA",
+                """
+                Own category strategy for packaging and logistics spend. Negotiate contracts, \
+                manage supplier risk, and structure index-linked pricing with caps and collars. \
+                Strong commercial and negotiation skills; category management background preferred.""", 4);
+        n += job(daniel, "Transportation Planner (6-month contract)", "Kontinental Freight", "Pune",
+                "CONTRACT", "LOGISTICS", "Day rate - negotiable",
+                """
+                Short-term contract to optimise cross-border road and ocean lanes during a network \
+                redesign. Build lane cost models, run carrier RFQs, and stand up an exception \
+                dashboard. Contract with potential to convert.""", 1);
+        n += job(priya, "Demand Planning Intern", "Mahindra Logistics", "Remote (India)",
+                "INTERNSHIP", "DEMAND_PLANNING", "Rs 25,000/month stipend",
+                """
+                6-month internship for a final-year student or fresh grad. Support forecast \
+                accuracy tracking, clean master data, and help run champion/challenger backtests. \
+                Great first step into supply chain analytics; mentorship included.""", 5);
+        n += job(meera, "Industry Mentor / Guest Faculty", "IIM Bangalore", "Remote",
+                "PART_TIME", "CAREERS", "Honorarium per session",
+                """
+                We're inviting experienced practitioners to mentor students and deliver occasional \
+                guest sessions on real-world supply chain problems. A few hours a month; ideal for \
+                senior professionals who want to give back to the next generation.""", 6);
+        return n;
+    }
+
+    private int job(User author, String title, String company, String location, String type,
+                    String tag, String salary, String description, long daysAgo) {
+        Job job = Job.create();
+        job.setTitle(title);
+        job.setCompany(company);
+        job.setLocation(location);
+        job.setEmploymentType(type);
+        job.setTag(tag);
+        job.setSalary(salary);
+        job.setDescription(description.stripIndent().trim());
+        job.setAuthorId(author.getId());
+        job.setCreatedAt(Instant.now().minus(daysAgo, ChronoUnit.DAYS));
+        jobs.save(job);
+        return 1;
+    }
+
+    // ── Sample templates library (real small files written via UploadStorage) ──
+    private int seedTemplates(User priya, User daniel, User rahul, User ana, User meera) {
+        Template t1 = template(rahul, "Safety Stock Calculator", "INVENTORY",
+                "Leadtime and service-level based safety stock by SKU. Fill in demand variability and lead time; the reorder point columns update the same way in your sheet.",
+                "safety-stock-calculator.csv", "text/csv",
+                """
+                sku,avg_daily_demand,demand_std,lead_time_days,service_level_z,safety_stock,reorder_point
+                A100,120,25,7,1.65,109,949
+                B200,60,15,14,1.65,92,932
+                C300,300,60,5,1.65,221,1721
+                D400,45,10,21,1.65,76,1021
+                """);
+        Template t2 = template(ana, "RFQ Supplier Comparison Sheet", "PROCUREMENT",
+                "Side-by-side scoring for a multi-supplier RFQ: unit price, lead time, payment terms, quality and risk. Weight the columns to fit your category.",
+                "rfq-supplier-comparison.csv", "text/csv",
+                """
+                supplier,unit_price,lead_time_days,payment_terms_days,quality_score,risk_score,weighted_total
+                Supplier A,10.20,21,60,8.5,7.0,7.8
+                Supplier B,9.80,35,45,7.5,6.0,7.1
+                Supplier C,10.50,14,30,9.0,8.5,8.4
+                """);
+        Template t3 = template(priya, "Forecast Bias & MAPE Tracker", "PLANNING",
+                "Track forecast vs actuals by month with bias and MAPE so over/under-forecasting shows up early. Drop in your own history to start.",
+                "forecast-bias-mape-tracker.csv", "text/csv",
+                """
+                month,forecast,actual,error,abs_pct_error,cumulative_bias
+                2026-01,1000,1080,-80,8.0%,-80
+                2026-02,1100,1050,50,4.5%,-30
+                2026-03,1200,1310,-110,8.4%,-140
+                2026-04,1150,1120,30,2.6%,-110
+                """);
+        Template t4 = template(daniel, "Incoterms 2020 Quick Reference", "LOGISTICS",
+                "One-page cheat-sheet of the 11 Incoterms 2020 rules and where risk transfers, for quick reference in freight and contract discussions.",
+                "incoterms-2020-cheatsheet.txt", "text/plain",
+                """
+                INCOTERMS 2020 - QUICK REFERENCE
+
+                Any mode of transport:
+                  EXW - Ex Works: buyer bears everything from seller's door.
+                  FCA - Free Carrier: seller hands goods to buyer's carrier.
+                  CPT - Carriage Paid To: seller pays carriage; risk passes at first carrier.
+                  CIP - Carriage & Insurance Paid To: CPT + seller insures (all-risk).
+                  DAP - Delivered At Place: seller delivers, ready for unloading.
+                  DPU - Delivered At Place Unloaded: seller unloads at destination.
+                  DDP - Delivered Duty Paid: seller covers duties and clearance.
+
+                Sea and inland waterway only:
+                  FAS - Free Alongside Ship: risk passes alongside the vessel.
+                  FOB - Free On Board: risk passes once goods are on board.
+                  CFR - Cost & Freight: seller pays freight; risk passes on board.
+                  CIF - Cost, Insurance & Freight: CFR + seller insures (minimum cover).
+                """);
+        // A few upvotes so the library looks alive on first view.
+        voteTemplate(t1, priya, ana, meera);
+        voteTemplate(t2, priya, daniel);
+        voteTemplate(t3, ana, rahul, meera, daniel);
+        voteTemplate(t4, priya, rahul);
+        return 4;
+    }
+
+    private Template template(User author, String title, String category, String description,
+                             String filename, String contentType, String content) {
+        String url = uploads.saveBytes(content.stripIndent().trim().getBytes(StandardCharsets.UTF_8),
+                filename, contentType);
+        Template tpl = Template.create();
+        tpl.setTitle(title);
+        tpl.setDescription(description);
+        tpl.setCategory(category);
+        tpl.setFileUrl(url);
+        tpl.setFileName(filename);
+        int dot = filename.lastIndexOf('.');
+        tpl.setFileType(dot >= 0 ? filename.substring(dot + 1).toUpperCase(Locale.ROOT) : "FILE");
+        tpl.setAuthorId(author.getId());
+        tpl.setCreatedAt(Instant.now().minus(3, ChronoUnit.DAYS));
+        return templates.save(tpl);
+    }
+
+    private void voteTemplate(Template t, User... voters) {
+        for (User v : voters) {
+            votes.save(Vote.createTemplateVote(v.getId(), t.getId()));
+        }
     }
 
     private User person(String email, String username, String name, String memberType,

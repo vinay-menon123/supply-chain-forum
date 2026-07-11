@@ -13,10 +13,6 @@ export default function Admin() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
-  const [planUser, setPlanUser] = useState("");
-  const [planMonths, setPlanMonths] = useState("12");
-  const [planNotice, setPlanNotice] = useState("");
-  const [planBusy, setPlanBusy] = useState(false);
 
   useEffect(() => {
     if (user?.role !== "ADMIN") return;
@@ -38,31 +34,6 @@ export default function Admin() {
       setNotice(`${label} failed: ${err instanceof Error ? err.message : "error"}`);
     } finally {
       setBusy("");
-    }
-  }
-
-  async function setPlan(plan: "PRO" | "FREE") {
-    const username = planUser.trim();
-    if (!username) {
-      setPlanNotice("Enter a member username first.");
-      return;
-    }
-    setPlanBusy(true);
-    setPlanNotice("");
-    try {
-      const res = await api<{ username: string; plan: string; pro: boolean; planExpiresAt: string | null }>(
-        "/admin/plan",
-        { method: "POST", body: JSON.stringify({ username, plan, months: Number(planMonths) || 12 }) }
-      );
-      setPlanNotice(
-        res.pro && res.planExpiresAt
-          ? `⭐ @${res.username} is now Pro until ${new Date(res.planExpiresAt).toLocaleDateString()}.`
-          : `@${res.username} is now on the ${res.plan} plan.`
-      );
-    } catch (err) {
-      setPlanNotice(err instanceof Error ? err.message : "Failed to update plan");
-    } finally {
-      setPlanBusy(false);
     }
   }
 
@@ -146,48 +117,6 @@ export default function Admin() {
         {notice && (
           <p className="mt-3 rounded-lg bg-slate-50 p-2 text-sm text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
             {notice}
-          </p>
-        )}
-      </div>
-
-      {/* Marketplace subscriptions */}
-      <div className="card mb-6">
-        <span className="section-title">⭐ Marketplace subscriptions</span>
-        <p className="meta mt-1 mb-3">
-          Grant or revoke a member's Pro Supplier plan (manual until online checkout is wired).
-        </p>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[200px] flex-1">
-            <label className="label" htmlFor="plan-user">Member username</label>
-            <input
-              id="plan-user"
-              className="input"
-              placeholder="e.g. priya_sharma"
-              value={planUser}
-              onChange={(e) => setPlanUser(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="plan-months">Months</label>
-            <input
-              id="plan-months"
-              type="number"
-              min={1}
-              className="input w-24"
-              value={planMonths}
-              onChange={(e) => setPlanMonths(e.target.value)}
-            />
-          </div>
-          <button onClick={() => setPlan("PRO")} className="btn-primary" disabled={planBusy}>
-            {planBusy ? "…" : "⭐ Grant Pro"}
-          </button>
-          <button onClick={() => setPlan("FREE")} className="btn-secondary" disabled={planBusy}>
-            Revoke
-          </button>
-        </div>
-        {planNotice && (
-          <p className="mt-3 rounded-lg bg-slate-50 p-2 text-sm text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
-            {planNotice}
           </p>
         )}
       </div>

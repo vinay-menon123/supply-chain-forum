@@ -2,6 +2,7 @@ import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, apiForm } from "../api";
 import { useAuth } from "../auth";
+import RichText from "../components/RichText";
 import ShareButton from "../components/ShareButton";
 import VoteButton from "../components/VoteButton";
 import { tagMeta } from "../tags";
@@ -226,7 +227,7 @@ export default function QuestionDetail() {
       {/* Question Card */}
       <article className="card p-6 md:p-8 bg-gradient-to-b from-white/[0.06] to-white/[0.01] border-white/[0.06] rounded-2xl shadow-xl">
         <div className="flex items-start justify-between gap-4">
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white leading-snug">
+          <h1 className="min-w-0 break-words text-2xl sm:text-3xl font-semibold tracking-tight text-white leading-snug">
             {question.title}
           </h1>
           {canDeleteQuestion && (
@@ -260,8 +261,8 @@ export default function QuestionDetail() {
           <ShareButton question={question} />
         </div>
         
-        <p className="mt-6 whitespace-pre-wrap text-white/90 leading-relaxed font-sans text-sm">
-          {question.body}
+        <p className="mt-6 whitespace-pre-wrap text-white/90 leading-relaxed font-sans text-sm break-words">
+          <RichText text={question.body} />
         </p>
         
         {question.imageUrl && (
@@ -346,8 +347,8 @@ export default function QuestionDetail() {
                 </div>
               </div>
               
-              <p className="whitespace-pre-wrap text-sm text-white/90 leading-relaxed font-sans">
-                {ans.body}
+              <p className="whitespace-pre-wrap text-sm text-white/90 leading-relaxed font-sans break-words">
+                <RichText text={ans.body} />
               </p>
               
               {ans.imageUrl && (
@@ -383,8 +384,8 @@ export default function QuestionDetail() {
                           </button>
                         )}
                       </div>
-                      <p className="text-white/80 leading-relaxed text-xs font-sans">
-                        {reply.body}
+                      <p className="whitespace-pre-wrap break-words text-white/80 leading-relaxed text-xs font-sans">
+                        <RichText text={reply.body} />
                       </p>
                     </div>
                   ))}

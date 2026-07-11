@@ -95,23 +95,81 @@ original Node/Express/Prisma backend, which now lives only in git history.)
   topic. All email is via `NotificationService` (`@Async`, no-op until SMTP set). NOTE: partial
   profile updates (Welcome/Profile pages) omit `notifyAllQuestions`; the endpoint only overwrites it
   when the field is present, so those screens don't reset the preference.
-- **Marketplace (`/marketplace`):** OFFER/SEEK listings across 5 categories (Warehouse, Transport,
-  Equipment, Services, General Logistics) with location/size/price/photo; contact seller via DMs.
-  Backed by the `Listing` table; wordlist/AI moderated; owner/admin delete.
-- **Marketplace monetization (TradeIndia/IndiaMART-style — buyers free, sellers pay):**
-  `User.plan` = FREE | PRO (+ `planExpiresAt`; `User.isPro()`). **Contact gating** —
-  `POST /api/listings/{id}/contact` records a `MarketplaceLead` and returns the seller's username
-  (client then opens the DM); FREE members are capped at **5 distinct supplier contacts / rolling
-  30 days** (`FREE_MONTHLY_CONTACTS`), PRO is unlimited (re-contacting a listing you already reached
-  is free). **Anti-disintermediation:** `MessageController` redacts phone/email in DMs for FREE
-  senders (masked as "[contact hidden — upgrade to Pro]"); PRO can share freely. NOTE: redaction is
-  global for free users, not marketplace-only — dial back if it hurts community DMs. **Pro perks:**
-  ⭐ Pro Supplier badge (`Json` exposes `pro` on author/public/private), priority placement (PRO
-  listings sort first in `/api/listings`), and a **lead inbox** (`GET /api/listings/leads` — count
-  for free sellers, who+what for PRO). **Pricing page** `/pricing` (₹0 Member vs ₹1,999/mo Pro);
-  Pro CTA sends an upgrade request via `/api/contact`. **Payments are manual for now** — admin grants
-  via `POST /api/admin/plan {username, plan, months}` (Admin page "Marketplace subscriptions" card);
-  wire Razorpay behind this seam later (buyer free / seller pays is the profit model).
+- **In-app notifications + @mentions (`/notifications`, navbar 🔔):** `Notification` table +
+  `NotificationController` (`GET /api/notifications` list+unread, `GET /unread` badge poll,
+  `POST /read` mark-all). Created by `service/InAppNotifier` on: someone **answers** your question,
+  **replies** to your answer, **accepts** your answer, or **@mentions** you (parsed from question/
+  comment bodies, same `@([A-Za-z0-9_]{3,30})` regex as `components/RichText.tsx`). Wired in
+  `QuestionController` (create/comment/accept); never notifies yourself; mentions dedupe against the
+  answer/question author already notified. Navbar bell polls `/unread` (20s, visibility-gated) and
+  refreshes on the `notif:refresh` window event the Notifications page fires after marking read.
+  `RichText` linkifies `@username` → profile in question/answer/reply bodies. (No autocomplete yet.)
+- **Jobs board (`/jobs`):** `Job` table + `JobController` (`/api/jobs` list+filter by `q`/`tag`/
+  `type`, create, delete). Any active member posts openings (title/company/location/employmentType
+  FULL_TIME|PART_TIME|CONTRACT|INTERNSHIP / SCM `tag` / salary / description / optional `applyUrl`);
+  wordlist/AI moderated; owner/admin delete. Apply = external `applyUrl` or DM the poster. Public
+  (viewable signed-out). Posting a job emails followers of its domain tag (`NotificationService.notifyNewJob`
+  → `findTopicFollowers`, @Async, no-op when mail off). *(No Indeed sync yet — member/admin-posted.)*
+- **Interactive SCM calculators (Tools tab in `/templates`):** client-side, no backend — Safety Stock &
+  Reorder Point (with optional lead-time variability), EOQ, Demurrage/Detention estimator, Inventory
+  Turns & Days of Supply. Pure math in `frontend/src/scm.ts` (incl. `normInv` = Acklam inverse-normal
+  for the service-level Z), rendered by `components/Calculators.tsx`. Templates page has a Downloads |
+  Calculators toggle. Zero cold-start / no external deps — the lowest-risk of the "indispensable" ideas.
+- **AI agent "control tower" (`/agents`, navbar "🤖 Agents"):** a **12-agent** disruption-recovery decision
+  engine (redesigned 2026-07-11 from the original 5-agent/7-signal demo — the blueprint the owner approved was
+  "Phase 1 + live signals"). Flow: **intake** (pick a shipment + optional free-text description of what
+  happened) → **12 specialist agents run over the ERP + live signals** (Cargo, Asset, Driver/Labour, Carrier
+  Sourcing, Route/Network, Mode-Shift, Inventory/Fulfillment, External Conditions, Compliance, Cost/Finance,
+  Risk, ESG) → engine generates **every applicable recovery strategy** (external carrier, own-fleet reposition/
+  standby, on-site repair, reroute around a HIGH blockage, mode-shift rail, mode-shift air, alt-DC re-fulfill)
+  → ranks by **risk-adjusted expected landed cost** → returns top-4 options + a recommendation + an **evidence
+  trail** for human approval.
+  - **Data layer:** `service/erp/ErpPort` (interface = the SAP-swap seam) backed by
+    `service/erp/SimulatedErpAdapter` over an **enriched** `resources/erp/erp-mock.json` (now also carries
+    cities+lat/long, lanes with distance/toll/ghat/rail/air, service points, DC stock, and richer shipment
+    fields: value, penaltyPerHour/cap, perishable/tempControlled/shelfLife, customerTier, `eWayBillIssuedHoursAgo`).
+    **The old `ErpService` was deleted** — inject `ErpPort`. (Deliberate call: `ErpPort` is backed by the
+    simulated adapter, **not** raw Postgres tables — the seam is what delivers SAP-readiness; persisting still-
+    simulated reference data would be churn for no analytical gain. A real `SapS4Adapter` implements `ErpPort` later.)
+  - **Live signals** (`service/agents/ExternalSignals`, genuinely change between runs, all **fail-safe** to a
+    modeled fallback offline): **Open-Meteo** current weather per city (free, **no key**, ~6s timeout), a
+    date-driven **festival calendar** (2026 dates, IST), and a **computed e-way-bill clock** (India basis: 1
+    day / 200 km). Verified live: Mumbai `drizzle (+0.5h)` tagged `<LIVE>`, e-way-bill `16h left of 24h`.
+  - **Decision model** (`AgentOrchestrator`, still **deterministic numbers / LLM only narrates**): ETA is a
+    distribution (mean+σ from route/weather/ghat); `Phi`/`phi` via an erf approximation give `P(on-time)` and
+    `E[max(0,ETA−SLA)]`. `E[landed cost] = transport + penaltyEV + serviceRisk + stockoutEV + spoilageEV +
+    co2Cost`. **`serviceRisk`** = `pFail · priorityWeight · value · 0.06` where `pFail = 1 − pOnTime·(rel/100)`
+    — this is the key tuning: it stops a HIGH/CRITICAL load being gambled on a cheap-but-flaky mover (before
+    it, SHP-1042 mis-recommended 52%-on-time rail to save ₹15k; now it correctly picks BlueDart). Rank by
+    `E[landed] + λ·priorityWeight·σ_cost`; display score 30–95, order-consistent. Every factor is tagged
+    **● LIVE / ◐ MODELED / ○ ROADMAP** so we never overclaim. Spoilage kills non-reefer movers for pharma
+    (₹value·0.30). `FACTOR_CATALOG_SIZE=118` (surfaced selectively per run).
+  - **AI narration:** `AgentAiClient` unchanged — **Anthropic** `claude-opus-4-8` if `ANTHROPIC_API_KEY`, else
+    **Gemini** `gemini-2.5-flash` via `GEMINI_API_KEY` (thinking disabled, `responseMimeType=application/json`),
+    else templated. Now narrates only the recommendation rationale + 3 agent headlines (Cargo/Conditions/Risk)
+    — small payload, robust — folded onto the deterministic reports. `aiPowered`/`aiProvider` expose the mode.
+  - Endpoints: `GET /api/agents/erp` (+aiEnabled/aiProvider), `POST /api/agents/run {shipmentId, disruption?}`
+    → `AgentRun {scenario, signals[], agents[12], options[≤4], recommendation{…,evidence[]}, factorsConsidered,
+    aiPowered, aiProvider}`. Auth-gated (run needs an active user). Frontend `pages/Agents.tsx`: intake box +
+    shipment picker, live-signal strip, progressive 12-agent trace with per-factor chips (impact colour +
+    source tag), option cards with expandable **cost breakdown** + on-time%/reliability/CO2, evidence trail.
+    Still **no DB** — pure computation over the adapter + live HTTP, verifiable without Postgres. Decision-support only.
+- **Templates & resources library (`/templates`):** `Template` table + `TemplateController`
+  (`/api/templates` list+filter, multipart upload, `POST /{id}/download` records+returns the file,
+  `POST /{id}/vote` toggles an upvote, delete). Members upload downloadable docs (PDF/Excel/Word/PPT/
+  CSV/ZIP/images ≤15MB) with title/description/category; download **and** upvote counts tracked.
+  **Upvotes reuse the `Vote` table** (new nullable `templateId` FK, mirroring the answer-vote pattern;
+  `Json.template` carries `voteCount`/`viewerHasVoted`). Cards **open a detail modal** (full
+  description + download + upvote); Jobs cards likewise open a JD modal (no upvote). Files go through
+  `UploadStorage.saveFile`/`saveBytes` (local disk default, Azure Blob when configured, doc-ext allowlist).
+  Public; wordlist/AI moderated; owner/admin delete.
+- **Marketplace + Pricing — REMOVED (2026-07-06).** Pulled pre-launch until there are real users
+  (monetization before liquidity = friction). Deleted: `MarketplaceController`, `Listing`,
+  `MarketplaceLead`, their repos, `Json.listing`, `notifyNewListing`, the `/admin/plan` endpoint +
+  Admin "subscriptions" card, and the `MessageController` free-tier contact **redaction** (which the
+  old note flagged as hurting community DMs). Dormant leftovers kept to avoid migration churn:
+  `User.plan`/`planExpiresAt`/`isPro()` fields + the `Listing`/`MarketplaceLead` tables (harmless,
+  unused). Re-introduce behind a seam later (buyer-free / seller-pays was the intended model).
 - **Reputation:** `5*questions + 2*comments + 10*upvotes_received + 15*accepted`. Leaderboard.
 - **Profiles:** click any username → their questions, comments ("Commented on" tab), upvotes,
   headline/bio/LinkedIn, verified + mentor badges. Self sees an "Edit profile" → `/settings`.
@@ -119,8 +177,9 @@ original Node/Express/Prisma backend, which now lives only in git history.)
   New DM → email to the recipient (`NotificationService.notifyNewMessage`); this also covers the
   mentorship "connect" flow (which happens over DMs).
 - **Email notifications (all via `MailService`/SMTP):** OTP sign-in, weekly digest, new followed-topic
-  / all-questions question, new marketplace listing (`notifyNewListing` → all non-banned members),
-  and new direct message. Everything degrades gracefully to a no-op when SMTP is off.
+  / all-questions question, and new direct message. Everything degrades gracefully to a no-op when
+  SMTP is off. (These are separate from the in-app 🔔 notifications above, which are DB-backed and
+  always on.)
 - **Moderation:** wordlist + optional AI. Flag → auto-ban at 5 flags. Admin dashboard.
 - **Admin** (`ADMIN_EMAILS`): delete any question/comment, view flagged users, ban/unban,
   verification review, **seed starter content** (`POST /api/admin/seed`), send test digest.
@@ -149,6 +208,7 @@ README.md                       Public-facing docs (stack, Railway steps, env ta
 
 backend/
   pom.xml                       Spring Boot 3.4.1, Java 21; jjwt, google-api-client, anthropic-java, starter-mail, azure-storage-blob
+                                (NOTE: Java 21, not 25 — SB 3.4.1's repackage can't read Java 25 bytecode; a Java-25 bump needs SB 3.5.x+)
   Dockerfile                    Maven multi-stage (for compose/k8s)
   src/main/resources/
     application.properties       server.port=${PORT:4000}, ddl-auto=none, sql.init.mode=always, quoted identifiers, UTC
@@ -156,28 +216,33 @@ backend/
   src/main/java/com/cscen/forum/
     ForumApplication.java
     config/    DataSourceConfig (parses postgres:// URLs), WebConfig (uploads + SPA fallback), StorageConfig (picks Local vs Azure UploadStorage), GlobalExceptionHandler ({"error":msg})
-    model/     User, Question, Comment, Vote, Message, ModerationEvent, Event, EventRsvp, Listing — UUID string ids, static create() factories
-    repo/      *Repository — native leaderboard query, JPQL search, mentor/flag finders, findTopicFollowers, findByVerifyStatus, ListingRepository.search
+    model/     User, Question, Comment, Vote, Message, ModerationEvent, Event, EventRsvp, Notification, Job, Template — UUID string ids, static create() factories (Listing/MarketplaceLead deleted; their tables remain dormant)
+    repo/      *Repository — native leaderboard query, JPQL search, mentor/flag finders, findTopicFollowers, findByVerifyStatus, NotificationRepository (markAllRead), JobRepository.search, TemplateRepository.search
     security/  JwtService, CurrentUser (optionalUserId/requireUserId/requireUser/requireActiveUser/requireAdmin)
-    service/   Json (DTO shaping incl. listing()), QuestionService (TAGS×11, toJson, tagLabel), ModerationService (wordlist||AI),
+    service/   Json (DTO shaping incl. notification()/job()/template()), QuestionService (TAGS×11, toJson, tagLabel), ModerationService (wordlist||AI),
                AiModerationClient (Anthropic SDK — moderation + isSupplyChainRelevant verify),
                MailService (Resend HTTP API preferred + JavaMail SMTP fallback, no-op until configured), DigestService (@Scheduled + manual test),
-               NotificationService (@Async new-question topic emails), SeedService (idempotent starter content),
-               UploadStorage (interface) + LocalUploadStorage (default, ./uploads) + AzureBlobUploadStorage (env-gated object storage)
+               NotificationService (@Async new-question/DM emails), InAppNotifier (in-app 🔔: answers/replies/accepts/mentions), SeedService (idempotent starter content),
+               UploadStorage (interface: saveImage + saveFile) + LocalUploadStorage (default, ./uploads) + AzureBlobUploadStorage (env-gated object storage),
+               erp/ErpPort (SAP-swap interface) + erp/SimulatedErpAdapter (loads enriched resources/erp/erp-mock.json),
+               agents/ExternalSignals (LIVE Open-Meteo weather + festival calendar + computed e-way-bill clock, fail-safe),
+               AgentAiClient (Anthropic|Gemini completion, fallback), AgentOrchestrator (12-agent risk-adjusted expected-landed-cost engine)
     web/       AuthController (google/profile/me — profile now takes topics/linkedin/headline/bio + runs verify),
-               QuestionController (create fires notifications), UserController, LeaderboardController, MessageController,
-               AdminController (flagged/ban/verify/pending/seed/digest), EventController, MentorshipController,
-               MarketplaceController (/api/listings CRUD+filter), HealthController, ApiException
+               QuestionController (create/comment/accept fire in-app notifications + mentions), UserController, LeaderboardController, MessageController,
+               NotificationController (/api/notifications), JobController (/api/jobs), TemplateController (/api/templates),
+               AgentController (/api/agents — control-tower ERP snapshot + run),
+               AdminController (flagged/ban/verify/pending/seed/digest), EventController, MentorshipController, HealthController, ApiException
 
 frontend/
   vite.config.ts, tsconfig.json, tailwind config (in package/index.css component classes)
   src/
-    App.tsx                     Routes (+/settings +/marketplace); `/` = user ? Feed : Landing; aurora background
-    api.ts, auth.tsx (updateUser), theme.ts, types.ts (+Listing), memberTypes.ts (6), tags.ts (11), marketplace.ts (5 cats/2 kinds), time.ts,
-    poll.ts (startVisibilityInterval — polls only while tab visible; used by Navbar unread + MessageThread)
-    components/  Navbar (responsive + hamburger), QuestionCard, VoteButton, ShareButton, MemberTypeBadge, TopicPicker
+    App.tsx                     Routes (+/jobs +/templates +/notifications; /marketplace +/pricing removed); `/` = user ? Feed : Landing; aurora background
+    api.ts, auth.tsx (updateUser), theme.ts, types.ts (+Notification/Job/Template; Listing removed), memberTypes.ts (6), tags.ts (11), time.ts,
+    scm.ts (pure calculator math: normInv/safetyStock/eoq/demurrage/inventoryTurns),
+    poll.ts (startVisibilityInterval — polls only while tab visible; used by Navbar unread + bell + MessageThread)
+    components/  Navbar (responsive + hamburger + 🔔 bell), QuestionCard, VoteButton, ShareButton, MemberTypeBadge, TopicPicker, RichText (@mention linkify), Calculators (SCM Tools tab)
     pages/       Landing, Login, Feed (+follow-topics widget), Ask, QuestionDetail, Profile (+verify/badges),
-                 Leaderboard, Events, Mentorship, Marketplace, Welcome (+topics/linkedin), Settings,
+                 Leaderboard, Events, Mentorship, Jobs, Templates, Agents (AI control tower), Notifications, Welcome (+topics/linkedin), Settings,
                  Messages, MessageThread, Admin (+verify review + seed/digest tools)
 
 k8s/  00-namespace, 01-secrets (dev placeholders), 02-postgres, 03-backend (image :vN), 04-frontend (image :vN)
@@ -240,12 +305,17 @@ DB predated moderation columns and the ALTER ran against a missing column. Fixed
 If you add a column, add it as a guarded `ADD COLUMN IF NOT EXISTS` and never assume it exists
 before adding it.
 
-Tables: `User, Question, Comment, Vote, Message, ModerationEvent, Event, EventRsvp, Listing,
-MarketplaceLead`. `User` also grew `plan` (guarded ADD COLUMN, default 'FREE') + `planExpiresAt`.
-`MarketplaceLead` (id/listingId/sellerId/buyerId/createdAt) is a fresh CREATE TABLE with a unique
-(listingId, buyerId) index.
-`User` grew `topics, linkedinUrl, headline, bio, verifyStatus` (all guarded ADD COLUMN). `Listing`
-is a fresh `CREATE TABLE IF NOT EXISTS` (kind/category/title/description/location/price/size/imageUrl/authorId).
+Tables: `User, Question, Comment, Vote, Message, ModerationEvent, Event, EventRsvp, Notification,
+Job, Template` (+ dormant `Listing, MarketplaceLead` — marketplace removed but tables kept to avoid
+migration churn). `User` still carries `plan`/`planExpiresAt` (guarded ADD COLUMN, default 'FREE',
+now unused). `User` grew `topics, linkedinUrl, headline, bio, verifyStatus` (all guarded ADD COLUMN).
+Newest additions are fresh `CREATE TABLE IF NOT EXISTS` blocks at the end of `schema.sql`:
+`Notification` (userId/actorId/type/questionId/commentId/text/readAt), `Job` (title/company/location/
+employmentType/tag/description/applyUrl/salary/authorId), `Template` (title/description/category/
+fileUrl/fileName/fileType/downloadCount/authorId). `Vote` gained a nullable `templateId` FK (+ unique
+`(userId,templateId)` index) so template upvotes reuse the same table as question/answer votes — the
+ALTER sits after the `Template` CREATE so the FK resolves. `spring.servlet.multipart.max-file-size`
+bumped to 15MB for template uploads.
 
 ---
 

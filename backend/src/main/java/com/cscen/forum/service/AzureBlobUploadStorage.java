@@ -65,4 +65,43 @@ public class AzureBlobUploadStorage implements UploadStorage {
         }
         return blob.getBlobUrl();
     }
+
+    @Override
+    public String saveFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return null;
+        }
+        String original = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+        int dot = original.lastIndexOf('.');
+        String ext = dot >= 0 ? original.substring(dot).toLowerCase() : "";
+        if (!LocalUploadStorage.ALLOWED_DOC_EXT.contains(ext)) {
+            throw ApiException.badRequest("Unsupported file type. Allowed: PDF, Excel, Word, PowerPoint, CSV, TXT, ZIP, images");
+        }
+        String name = UUID.randomUUID() + ext;
+        String contentType = file.getContentType() == null ? "application/octet-stream" : file.getContentType();
+        BlobClient blob = container.getBlobClient(name);
+        try (InputStream in = file.getInputStream()) {
+            blob.upload(in, file.getSize(), true);
+            blob.setHttpHeaders(new BlobHttpHeaders().setContentType(contentType));
+        } catch (IOException e) {
+            throw new ApiException(500, "Failed to store file");
+        }
+        return blob.getBlobUrl();
+    }
+
+    @Override
+    public String saveBytes(byte[] data, String filename, String contentType) {
+        int dot = filename == null ? -1 : filename.lastIndexOf('.');
+        String ext = dot >= 0 ? filename.substring(dot).toLowerCase() : "";
+        String name = UUID.randomUUID() + ext;
+        String type = contentType == null ? "application/octet-stream" : contentType;
+        BlobClient blob = container.getBlobClient(name);
+        try (InputStream in = new java.io.ByteArrayInputStream(data)) {
+            blob.upload(in, data.length, true);
+            blob.setHttpHeaders(new BlobHttpHeaders().setContentType(type));
+        } catch (IOException e) {
+            throw new ApiException(500, "Failed to store file");
+        }
+        return blob.getBlobUrl();
+    }
 }

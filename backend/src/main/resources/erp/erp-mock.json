@@ -1,0 +1,88 @@
+{
+  "company": "Nexus Freight & Distribution (simulated ERP)",
+  "cities": [
+    { "name": "Nagpur",     "lat": 21.15, "lon": 79.09 },
+    { "name": "Pune",       "lat": 18.52, "lon": 73.86 },
+    { "name": "Nashik",     "lat": 19.99, "lon": 73.79 },
+    { "name": "Mumbai",     "lat": 19.08, "lon": 72.88 },
+    { "name": "Hyderabad",  "lat": 17.39, "lon": 78.49 },
+    { "name": "Aurangabad", "lat": 19.88, "lon": 75.34 },
+    { "name": "Surat",      "lat": 21.17, "lon": 72.83 }
+  ],
+  "vehicles": [
+    { "id": "VH-07", "plate": "MH-04-DK-3097", "type": "32ft Multi-Axle", "capacityTons": 18, "currentCity": "Nagpur",     "status": "BREAKDOWN", "driver": "R. Pawar",    "driverHosLeftHrs": 3.0, "fuelPct": 55, "ageYears": 6, "failureRatePct": 14, "reefer": false, "note": "Gearbox failure on NH-44 near Nagpur" },
+    { "id": "VH-03", "plate": "MH-20-AB-1121", "type": "20ft Container",  "capacityTons": 10, "currentCity": "Aurangabad", "status": "IDLE",      "driver": "S. Khan",     "driverHosLeftHrs": 9.0, "fuelPct": 88, "ageYears": 3, "failureRatePct": 6,  "reefer": false, "note": "Available, last trip closed" },
+    { "id": "VH-11", "plate": "MH-12-CE-5540", "type": "32ft Multi-Axle", "capacityTons": 18, "currentCity": "Pune",       "status": "EN_ROUTE",  "driver": "A. Deshmukh", "driverHosLeftHrs": 4.5, "fuelPct": 40, "ageYears": 4, "failureRatePct": 8,  "reefer": false, "note": "On Pune-Mumbai run" },
+    { "id": "VH-05", "plate": "TS-09-UB-7781", "type": "24ft Reefer",     "capacityTons": 14, "currentCity": "Hyderabad",  "status": "IDLE",      "driver": "K. Reddy",    "driverHosLeftHrs": 10.0,"fuelPct": 92, "ageYears": 2, "failureRatePct": 4,  "reefer": true,  "note": "Available, reefer-capable" },
+    { "id": "VH-09", "plate": "MH-14-GH-2210", "type": "32ft Multi-Axle", "capacityTons": 18, "currentCity": "Nashik",     "status": "BREAKDOWN", "driver": "P. Jadhav",   "driverHosLeftHrs": 1.5, "fuelPct": 30, "ageYears": 7, "failureRatePct": 17, "reefer": false, "note": "Tyre burst + axle damage on NH-160" },
+    { "id": "VH-02", "plate": "MH-01-XY-9032", "type": "20ft Container",  "capacityTons": 10, "currentCity": "Mumbai",     "status": "EN_ROUTE",  "driver": "F. Sheikh",   "driverHosLeftHrs": 6.0, "fuelPct": 62, "ageYears": 5, "failureRatePct": 9,  "reefer": false, "note": "On Mumbai-Surat run" }
+  ],
+  "carriers": [
+    { "id": "C1", "name": "BlueDart Surface",       "costPerKm": 42, "reliabilityPct": 94, "avgResponseHrs": 3, "claimsRatePct": 1.2, "spot": false, "compliant": true,  "lanes": ["Nagpur-Pune", "Mumbai-Pune", "Nashik-Mumbai"], "note": "Premium, GPS-tracked, strong SLA record" },
+    { "id": "C2", "name": "VRL Roadlines",          "costPerKm": 31, "reliabilityPct": 88, "avgResponseHrs": 5, "claimsRatePct": 2.6, "spot": false, "compliant": true,  "lanes": ["Nagpur-Pune", "Nagpur-Mumbai", "Nashik-Mumbai"], "note": "Good pan-India network, mid response time" },
+    { "id": "C3", "name": "Vidarbha Local Carriers","costPerKm": 27, "reliabilityPct": 78, "avgResponseHrs": 2, "claimsRatePct": 5.1, "spot": true,  "compliant": false, "lanes": ["Nagpur-Pune"], "note": "Cheapest + fastest to mobilise, but variable; PUC lapsed" },
+    { "id": "C4", "name": "TCI Freight",            "costPerKm": 38, "reliabilityPct": 91, "avgResponseHrs": 4, "claimsRatePct": 1.8, "spot": false, "compliant": true,  "lanes": ["Nashik-Mumbai", "Mumbai-Pune", "Hyderabad-Pune"], "note": "Reliable, wide coverage, reefer-capable" },
+    { "id": "C5", "name": "Gati Express",           "costPerKm": 35, "reliabilityPct": 86, "avgResponseHrs": 4, "claimsRatePct": 3.0, "spot": true,  "compliant": true,  "lanes": ["Hyderabad-Pune", "Nagpur-Mumbai"], "note": "Balanced cost and reliability" }
+  ],
+  "depots": [
+    { "city": "Nagpur",     "note": "Regional hub - no idle unit right now" },
+    { "city": "Aurangabad", "note": "Idle unit VH-03 stationed here" },
+    { "city": "Pune",       "note": "Primary DC" },
+    { "city": "Hyderabad",  "note": "Southern hub - idle unit VH-05" }
+  ],
+  "lanes": [
+    { "route": "Nagpur-Pune",    "distanceKm": 700, "tollInr": 1450, "ghatSection": true,  "checkposts": 1, "hasRail": true,  "hasAir": true,  "altRouteKm": 745, "railTerminalHrs": 6, "airCutoffHrs": 4 },
+    { "route": "Nashik-Mumbai",  "distanceKm": 170, "tollInr": 480,  "ghatSection": true,  "checkposts": 0, "hasRail": true,  "hasAir": false, "altRouteKm": 210, "railTerminalHrs": 5, "airCutoffHrs": 0 },
+    { "route": "Hyderabad-Pune", "distanceKm": 560, "tollInr": 1320, "ghatSection": false, "checkposts": 1, "hasRail": true,  "hasAir": true,  "altRouteKm": 590, "railTerminalHrs": 6, "airCutoffHrs": 4 }
+  ],
+  "servicePoints": [
+    { "city": "Nagpur", "heavyRepair": true,  "note": "OEM service point on NH-44" },
+    { "city": "Nashik", "heavyRepair": false, "note": "Tyre + light repair only" },
+    { "city": "Pune",   "heavyRepair": true,  "note": "Full workshop at DC" }
+  ],
+  "distributionCentres": [
+    { "city": "Pune",   "onHandUnits": 4200, "dailyDemandUnits": 2000, "altSourceCity": "Mumbai", "altSourceLeadHrs": 10 },
+    { "city": "Mumbai", "onHandUnits": 300,  "dailyDemandUnits": 1500, "altSourceCity": "Pune",   "altSourceLeadHrs": 8  }
+  ],
+  "advisories": [
+    { "area": "Pune city entry",         "route": "Nagpur-Pune",    "type": "FESTIVAL", "severity": "MODERATE", "delayHrs": 4, "message": "Ganesh festival congestion near Pune city entry; heavy traffic expected" },
+    { "area": "NH-44 Nagpur belt",       "route": "Nagpur-Pune",    "type": "WEATHER",  "severity": "LOW",      "delayHrs": 1, "message": "Light rain forecast along NH-44; minor slowdown" },
+    { "area": "Mumbai-Nashik corridor",  "route": "Nashik-Mumbai",  "type": "BLOCKAGE", "severity": "HIGH",     "delayHrs": 6, "message": "Kasara Ghat landslide clearing; single-lane movement, long queues" },
+    { "area": "Hyderabad ORR",           "route": "Hyderabad-Pune", "type": "WEATHER",  "severity": "LOW",      "delayHrs": 1, "message": "Isolated showers near Hyderabad outer ring; negligible impact" }
+  ],
+  "shipments": [
+    {
+      "id": "SHP-1042", "ref": "PO-88231", "cargo": "FMCG - packaged foods", "tons": 18,
+      "origin": "Nagpur", "destination": "Pune", "route": "Nagpur-Pune",
+      "remainingKm": 680, "slaHoursRemaining": 26, "value": 1850000, "priority": "HIGH",
+      "vehicleId": "VH-07", "breakdownIssue": "Gearbox failure on NH-44 near Nagpur",
+      "nearbySpare": { "vehicleId": "VH-03", "fromCity": "Aurangabad", "repositionKm": 250 },
+      "candidateCarrierIds": ["C1", "C2", "C3"],
+      "customerTier": "KEY_ACCOUNT", "penaltyPerHourInr": 3500, "penaltyCapInr": 92000,
+      "perishable": false, "tempControlled": false, "shelfLifeHrs": 0, "hazmat": false,
+      "eWayBillIssuedHoursAgo": 30, "skuCriticality": "A"
+    },
+    {
+      "id": "SHP-2087", "ref": "PO-90144", "cargo": "Auto components (JIT)", "tons": 14,
+      "origin": "Nashik", "destination": "Mumbai", "route": "Nashik-Mumbai",
+      "remainingKm": 165, "slaHoursRemaining": 9, "value": 2400000, "priority": "CRITICAL",
+      "vehicleId": "VH-09", "breakdownIssue": "Tyre burst + axle damage on NH-160",
+      "nearbySpare": null,
+      "candidateCarrierIds": ["C1", "C2", "C4"],
+      "customerTier": "OEM_LINE", "penaltyPerHourInr": 9000, "penaltyCapInr": 300000,
+      "perishable": false, "tempControlled": false, "shelfLifeHrs": 0, "hazmat": false,
+      "eWayBillIssuedHoursAgo": 8, "skuCriticality": "A"
+    },
+    {
+      "id": "SHP-3310", "ref": "PO-91002", "cargo": "Pharma (temp-controlled)", "tons": 8,
+      "origin": "Hyderabad", "destination": "Pune", "route": "Hyderabad-Pune",
+      "remainingKm": 560, "slaHoursRemaining": 22, "value": 3100000, "priority": "HIGH",
+      "vehicleId": "VH-05", "breakdownIssue": null,
+      "nearbySpare": { "vehicleId": "VH-05", "fromCity": "Hyderabad", "repositionKm": 0 },
+      "candidateCarrierIds": ["C4", "C5"],
+      "customerTier": "HOSPITAL_CHAIN", "penaltyPerHourInr": 4200, "penaltyCapInr": 140000,
+      "perishable": true, "tempControlled": true, "shelfLifeHrs": 30, "hazmat": false,
+      "eWayBillIssuedHoursAgo": 12, "skuCriticality": "A"
+    }
+  ]
+}
