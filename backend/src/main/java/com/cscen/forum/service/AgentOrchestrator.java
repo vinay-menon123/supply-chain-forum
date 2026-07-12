@@ -107,6 +107,21 @@ public class AgentOrchestrator {
     /** One department that must be told, and what it has to do. */
     public record Stakeholder(String department, String scope, String action, String urgency) {}
 
+    // ── the decision brief: how the engine actually got to its answer ──
+
+    /** One link in the reasoning chain, as a question the analyst would ask and its answer. */
+    public record DecisionStep(int step, String question, String finding) {}
+
+    /** Why the winner beat this specific rival — with the rupee delta that decided it. */
+    public record Comparison(String optionId, String title, long expectedCost, long deltaVsBest,
+                             int servicePct, String whyNotChosen) {}
+
+    public record DecisionBrief(String situation, List<String> bindingConstraints,
+                               List<DecisionStep> howWeGotHere, List<Comparison> headToHead,
+                               List<String> decisiveFactors, List<String> assumptions,
+                               List<String> notConsidered, List<String> whatWouldChangeIt,
+                               String bottomLine) {}
+
     public record SignalView(String kind, String label, String detail, String source, String impact) {}
 
     public record ScenarioView(String shipmentId, String ref, String cargo, double tons, String route,
@@ -120,7 +135,7 @@ public class AgentOrchestrator {
 
     public record AgentRun(ScenarioView scenario, List<SignalView> signals, List<AgentReport> agents,
                            List<OptionView> options, Recommendation recommendation,
-                           List<Stakeholder> stakeholders, int factorsConsidered,
+                           List<Stakeholder> stakeholders, DecisionBrief brief, int factorsConsidered,
                            boolean aiPowered, String aiProvider) {}
 
     public boolean isAiEnabled() { return ai.isEnabled(); }
@@ -197,8 +212,10 @@ public class AgentOrchestrator {
             aiPowered = true;
         }
 
+        DecisionBrief brief = buildDecisionBrief(ctx, drafts, top, best, distribution);
+
         Recommendation rec = new Recommendation(best.id, best.title, rationale, evidence);
-        return new AgentRun(scenario, sig, agents, options, rec, stakeholders,
+        return new AgentRun(scenario, sig, agents, options, rec, stakeholders, brief,
                 distribution ? FACTOR_CATALOG_SIZE_DISTRIBUTION : FACTOR_CATALOG_SIZE,
                 aiPowered, aiProvider());
     }
@@ -1146,6 +1163,358 @@ public class AgentOrchestrator {
 
     private static int pct(int part, int whole) {
         return whole <= 0 ? 0 : (int) Math.round(100.0 * part / whole);
+    }
+
+    // ── 4c. the decision brief: how we actually got to the answer ──
+
+    /**
+     * A written audit of the decision for an analyst: what bound us, what we compared,
+     * what tipped it, what we assumed, and what would flip the answer. Fully
+     * deterministic — every sentence is derived from the same numbers that were scored,
+     * so the brief can never disagree with the recommendation.
+     */
+    private DecisionBrief buildDecisionBrief(Ctx ctx, List<Draft> all, List<Draft> top,
+                                             Draft best, boolean distribution) {
+        Shipment s = ctx.s();
+        List<String> binding = new ArrayList<>();
+        List<DecisionStep> steps = new ArrayList<>();
+        List<String> decisive = new ArrayList<>();
+        List<String> assumptions = new ArrayList<>();
+        List<String> notConsidered = new ArrayList<>();
+        List<String> sensitivity = new ArrayList<>();
+
+        String plate = ctx.veh() != null ? ctx.veh().plate() : s.vehicleId();
+        String issue = s.breakdownIssue() != null ? s.breakdownIssue() : "recovery review";
+
+        // ── situation ──
+        String situation;
+        if (distribution) {
+            int units = totalUnits(s);
+            situation = String.format(
+                    "%s (%s) is down - %s - with %s units on board across %d SKUs, bound for %s. That load IS those cities' %s-day cover, so there is no buffer sitting behind it: whatever we fail to deliver on time is a shelf gap, not a delayed invoice. INR %s of stock and INR %s/h of contractual penalty are exposed.",
+                    plate, s.ref(), issue, fmt(units), erp.skus().size(),
+                    String.join(" + ", planner.destinations(s)), fmt(s.coverDays()),
+                    fmt(s.value()), fmt(s.penaltyPerHourInr()));
+        } else {
+            situation = String.format(
+                    "%s (%s) is down - %s - carrying %s of %s on the %s lane. %s km and %sh of SLA remain; INR %s of cargo and INR %s/h of penalty are exposed for a %s customer.",
+                    plate, s.ref(), issue, fmt(s.tons()) + "t", s.cargo(), routeLabel(s.route()),
+                    fmt(s.remainingKm()), fmt(s.slaHoursRemaining()), fmt(s.value()),
+                    fmt(s.penaltyPerHourInr()), tierLabel(s.customerTier()));
+        }
+
+        // ── binding constraints + the reasoning chain ──
+        int n = 1;
+        if (distribution) {
+            SalesChannel tightest = tightestChannel(s);
+            double truckEarliest = earliestTruckEta(all);
+            int lendable = totalLendable();
+            int demand = totalUnits(s);
+
+            steps.add(new DecisionStep(n++, "What is actually at stake?",
+                    String.format("%s units - the entire %s-day cover for %s. The cities hold no buffer, so a miss is a stock-out on shelf, and the channels carry INR %s/unit of penalty at the tight end.",
+                            fmt(demand), fmt(s.coverDays()), String.join(" + ", planner.destinations(s)),
+                            tightest != null ? fmt(tightest.penaltyPerUnitInr()) : "-")));
+
+            if (tightest != null) {
+                binding.add(String.format("%s is the tightest promise on the load: %sh, covering %s units. It sets the clock everything else is judged against.",
+                        tightest.name(), fmt(tightest.maxDelayHrs()), fmt(channelDemand(s, tightest.code(), null))));
+                steps.add(new DecisionStep(n++, "What is the hard deadline?",
+                        String.format("Not one SLA but five - each consumer channel has its own promise window. %s at %sh is the binding one; traditional trade at %sh can wait for the next beat. So the load does not have a single deadline, it has a ladder of them.",
+                                tightest.name(), fmt(tightest.maxDelayHrs()), fmt(channelPromise("TT")))));
+            }
+
+            steps.add(new DecisionStep(n++, "What can the stranded vehicle still do?",
+                    String.format("The stock is not lost, it is late - every unit is still on the truck. Repaired or cross-docked, its earliest arrival at any city is ~%sh.%s",
+                            fmt(round1(truckEarliest)),
+                            tightest != null && truckEarliest > tightest.maxDelayHrs()
+                                    ? " That is AFTER the " + fmt(tightest.maxDelayHrs()) + "h " + tightest.name() + " window, so the vehicle alone cannot serve that channel at all - no matter which transporter we put on it."
+                                    : " That clears every channel window, so the vehicle alone is viable.")));
+
+            if (tightest != null && truckEarliest > tightest.maxDelayHrs()) {
+                binding.add(String.format("The vehicle cannot reach any city before ~%sh, which is past the %sh %s window. Any vehicle-only plan therefore scores 0%% on that channel - this is the single fact that decides the case.",
+                        fmt(round1(truckEarliest)), fmt(tightest.maxDelayHrs()), tightest.name()));
+            }
+
+            binding.add(String.format("The depots can only lend %s of %s units (%d%%). An RDC must retain its own cover until its inbound lands (%s days out) plus %s day safety, so it lends spare cover only - never its working stock.",
+                    fmt(lendable), fmt(demand), pct(lendable, demand),
+                    fmt(erp.rdcs().isEmpty() ? 2 : erp.rdcs().get(0).replenishInDays()),
+                    fmt(DistributionPlanner.RDC_SAFETY_DAYS)));
+
+            steps.add(new DecisionStep(n++, "What else can supply this demand?",
+                    String.format("Two RDCs. Lendable = (days of cover - replenishment lead - safety) x daily demand, per SKU. That yields %s units - %d%% of the load. Neither depot can cover this alone, and even pooled they cannot: depot stock alone tops out at %d%% fill.",
+                            fmt(lendable), pct(lendable, demand), pct(lendable, demand))));
+
+            steps.add(new DecisionStep(n++, "So who gets the scarce units?",
+                    String.format("Scarce stock is allocated by avoided penalty: the tightest, most expensive promise first (%s at INR %s/unit), the most tolerant last (traditional trade at INR %s/unit, which can ride the slow vehicle without penalty). Each line is then routed to the FASTEST source that actually holds that SKU.",
+                            tightest != null ? tightest.name() : "Qcommerce",
+                            tightest != null ? fmt(tightest.penaltyPerUnitInr()) : "-",
+                            fmt(erp.findChannel("TT").map(SalesChannel::penaltyPerUnitInr).orElse(3.0)))));
+        } else {
+            steps.add(new DecisionStep(n++, "What is actually at stake?",
+                    String.format("INR %s of %s for a %s customer, at INR %s/h of penalty (capped at INR %s), with %sh of SLA left.",
+                            fmt(s.value()), s.cargo(), tierLabel(s.customerTier()),
+                            fmt(s.penaltyPerHourInr()), fmt(s.penaltyCapInr()), fmt(s.slaHoursRemaining()))));
+            binding.add(String.format("SLA: %sh remaining against a %sh base transit for the %s km still to run.",
+                    fmt(s.slaHoursRemaining()), fmt(round1(ctx.base())), fmt(s.remainingKm())));
+            steps.add(new DecisionStep(n++, "What is the hard deadline?",
+                    String.format("%sh of SLA. Base transit alone is %sh, leaving %sh of headroom for repair, mobilisation and any external delay.",
+                            fmt(s.slaHoursRemaining()), fmt(round1(ctx.base())),
+                            fmt(round1(s.slaHoursRemaining() - ctx.base())))));
+            steps.add(new DecisionStep(n++, "What are the recovery paths?",
+                    String.format("%d generated: %s.", all.size(),
+                            all.stream().map(d -> d.title).reduce((a, b) -> a + "; " + b).orElse("-"))));
+            if (s.tempControlled()) {
+                binding.add("Cold chain: the cargo is temperature-controlled, so any non-reefer mover carries a ~30% of value spoilage write-off - which prices most of them out on its own.");
+            }
+        }
+
+        // External conditions + compliance always bind.
+        WeatherSignal worst = ctx.wxOrigin().delayHrs() >= ctx.wxDest().delayHrs() ? ctx.wxOrigin() : ctx.wxDest();
+        String condText = String.format("Live conditions add %sh to every road ETA (%s %s%s%s) and widen the ETA spread by %sh, which is what turns a 'should make it' into a probability rather than a promise.",
+                fmt(round1(ctx.extDelay())), worst.city(), worst.condition(),
+                ctx.fest().active() ? ", " + ctx.fest().name() + " congestion" : "",
+                ctx.advisories().isEmpty() ? "" : ", " + ctx.advisories().size() + " route advisory",
+                fmt(round1(ctx.extSigma())));
+        steps.add(new DecisionStep(n++, "What do live conditions add?", condText));
+        if (ctx.extDelay() > 0) binding.add(condText);
+
+        EwayBillSignal eway = ctx.eway();
+        if (eway.remainingHrs() < best.etaMean + 6) {
+            binding.add(String.format("E-way bill has only %sh left against a %sh plan - it must be extended before dispatch or the load is stopped at a check-post.",
+                    fmt(eway.remainingHrs()), fmt(round1(best.etaMean))));
+        }
+
+        // ── how each option was priced and ranked ──
+        if (distribution) {
+            steps.add(new DecisionStep(n++, "How was each option priced?",
+                    "Every option is costed end-to-end at the UNIT level, not the truck level: freight on every leg (depot short-hauls + the vehicle's remaining run) + RDC handling + a per-unit channel penalty for every unit that lands outside its promise window. That last term is the one that separates the options - it is where a missed Qcommerce window turns into real money."));
+        } else {
+            steps.add(new DecisionStep(n++, "How was each option priced?",
+                    "Each option is costed as an expected landed cost: transport + P(late) x SLA penalty + service-risk (the chance the option simply fails, priced against cargo value and priority) + stock-out and spoilage exposure + carbon. ETA is treated as a distribution, not a point, so 'on time' is a probability."));
+        }
+        steps.add(new DecisionStep(n++, "How were they ranked?",
+                "Lowest risk-adjusted expected landed cost wins, with a variance penalty scaled by cargo priority - so a high-value or CRITICAL load is deliberately NOT gambled on a cheap-but-flaky option. The displayed 0-100 score is just that ranking, normalised."));
+
+        // ── head to head: why the winner beat each rival ──
+        List<Comparison> head = new ArrayList<>();
+        for (Draft d : top) {
+            if (d == best) continue;
+            long delta = d.expectedCost - best.expectedCost;
+            int service = d.plan != null ? d.plan.fillPct() : (int) Math.round(d.pOnTime * 100);
+            head.add(new Comparison(d.id, d.title, d.expectedCost, delta, service, whyNotChosen(best, d, distribution)));
+        }
+
+        // ── decisive factors: the biggest cost gaps between the winner and the runner-up ──
+        Draft runnerUp = top.size() > 1 ? top.get(1) : null;
+        if (runnerUp != null) {
+            if (distribution && best.plan != null && runnerUp.plan != null) {
+                long penGap = runnerUp.plan.penaltyInr() - best.plan.penaltyInr();
+                long frGap = runnerUp.plan.freightInr() - best.plan.freightInr();
+                if (penGap > 0) {
+                    decisive.add(String.format("Channel service penalty is the decider: the runner-up carries INR %s more of it (INR %s vs INR %s), because it leaves units outside their promise windows.",
+                            fmt(penGap), fmt(runnerUp.plan.penaltyInr()), fmt(best.plan.penaltyInr())));
+                }
+                int fillGap = best.plan.fillPct() - runnerUp.plan.fillPct();
+                if (fillGap != 0) {
+                    decisive.add(String.format("Service level: the recommendation fills %d%% of units inside their promise windows vs %d%% for the runner-up - a %d point gap.",
+                            best.plan.fillPct(), runnerUp.plan.fillPct(), Math.abs(fillGap)));
+                }
+                if (frGap < 0) {
+                    decisive.add(String.format("The recommendation actually spends INR %s MORE on freight - and is still cheaper overall, because avoiding the penalty is worth far more than the extra haulage.",
+                            fmt(Math.abs(frGap))));
+                }
+                if (!best.plan.backfills().isEmpty() && best.plan.backfills().stream().allMatch(b -> b.unitsRepaid() >= b.unitsLent())) {
+                    decisive.add("The depot draw-down is free to unwind: the recovered load repays every lent unit at the depot gate, so borrowing from the RDCs costs nothing in extra freight.");
+                }
+            } else {
+                // Rank the cost components by how much they actually separated the two
+                // options, and only report the ones that are material - a few hundred
+                // rupees of difference did not "decide" anything.
+                long material = Math.max(1000, Math.round(best.expectedCost * 0.02));
+                record Gap(long amount, String text) {}
+                List<Gap> gaps = new ArrayList<>();
+
+                long spoilGap = runnerUp.spoilageEV - best.spoilageEV;
+                if (spoilGap > 0) gaps.add(new Gap(spoilGap, String.format(
+                        "Spoilage exposure: the runner-up carries INR %s of cold-chain write-off risk that the recommendation does not - on temperature-controlled cargo that single term decides it.",
+                        fmt(spoilGap))));
+
+                long svcGap = runnerUp.serviceRisk - best.serviceRisk;
+                if (svcGap > 0) gaps.add(new Gap(svcGap, String.format(
+                        "Service-risk: the runner-up is INR %s worse on the chance of simply failing (%d%% on-time x %d%% reliability, vs %d%% x %d%% for the recommendation).",
+                        fmt(svcGap), (int) Math.round(runnerUp.pOnTime * 100), runnerUp.reliability,
+                        (int) Math.round(best.pOnTime * 100), best.reliability)));
+
+                long penGap = runnerUp.penaltyEV - best.penaltyEV;
+                if (penGap > 0) gaps.add(new Gap(penGap, String.format(
+                        "Expected SLA penalty: INR %s worse on the runner-up (it is more likely to run past the %sh window).",
+                        fmt(penGap), fmt(s.slaHoursRemaining()))));
+
+                long trGap = runnerUp.transport - best.transport;
+                if (trGap > 0) gaps.add(new Gap(trGap, String.format(
+                        "Execution cost: the runner-up costs INR %s more to actually run (INR %s vs INR %s) for no service gain - this is the plain-money gap.",
+                        fmt(trGap), fmt(runnerUp.transport), fmt(best.transport))));
+
+                gaps.sort((x, y) -> Long.compare(y.amount(), x.amount()));
+                gaps.stream().filter(g -> g.amount() >= material).limit(3)
+                        .forEach(g -> decisive.add(g.text()));
+
+                if (trGap < 0) decisive.add(String.format(
+                        "Note the trade-off: the recommendation is INR %s MORE expensive to execute, and still wins - it buys down more risk than it costs.",
+                        fmt(Math.abs(trGap))));
+                if (decisive.isEmpty() && !gaps.isEmpty()) {
+                    decisive.add(String.format("The options are closely matched - the recommendation leads by only INR %s overall, driven mostly by %s.",
+                            fmt(runnerUp.expectedCost - best.expectedCost),
+                            gaps.get(0).text().substring(0, gaps.get(0).text().indexOf(':')).toLowerCase()));
+                }
+            }
+        }
+        if (decisive.isEmpty()) decisive.add("The recommendation leads on every cost component - there is no trade-off to argue about.");
+
+        // ── assumptions (the tunable levers) ──
+        if (distribution) {
+            assumptions.add("RDC daily demand in units is derived from city demand (this load = " + fmt(s.coverDays()) + " days of cover, so daily = units / " + fmt(s.coverDays()) + "). The source data gives depot stock in DAYS, and days cannot be allocated - only units can.");
+            assumptions.add("Channel priority is set by penalty per unit (Qcommerce > Ecommerce > Modern trade > D2C > Traditional trade). If your OTIF contracts make Modern trade the most expensive to miss, that ranking flips and so does the allocation.");
+            assumptions.add("A depot retains its replenishment lead time + " + fmt(DistributionPlanner.RDC_SAFETY_DAYS) + " day of safety before it lends anything. Loosen that and more stock frees up.");
+            assumptions.add("Short-haul freight is priced off the trunk rate, scaled by distance with a short-haul inefficiency factor.");
+        }
+        assumptions.add("Road speed is a flat " + (int) SPEED_KMPH + " km/h effective, including stops.");
+        assumptions.add("Repair time and cost are inferred from the failure text (engine/gearbox/axle = heavy) and whether the nearest service point has a heavy-repair bay.");
+        assumptions.add("Carbon is priced at INR " + (int) CARBON_PRICE + "/kg CO2.");
+
+        // ── honest limits ──
+        notConsidered.add("Live road traffic - not connected. ETAs use modelled speeds plus live weather, not live congestion.");
+        notConsidered.add("Live spot-rate market - carrier and transporter rates come from the contracted master, not a live quote.");
+        notConsidered.add("Telematics fault codes - the failure mode is read from the reported text, not the vehicle bus.");
+        notConsidered.add("Strike / bandh / protest feeds - modelled as route advisories, not a live source.");
+        if (distribution) {
+            notConsidered.add("Individual customer / store-level allocation inside a channel - we allocate to the channel, not to the named account.");
+        }
+
+        // ── what would change the answer ──
+        if (distribution) {
+            SalesChannel tightest = tightestChannel(s);
+            double truckEarliest = earliestTruckEta(all);
+            if (tightest != null && truckEarliest > tightest.maxDelayHrs()) {
+                sensitivity.add(String.format("If %s's promise window were relaxed from %sh to ~%sh, the vehicle could serve it directly and a simple repair-and-run would become viable - the depots would not be needed at all.",
+                        tightest.name(), fmt(tightest.maxDelayHrs()), fmt(Math.ceil(truckEarliest))));
+            }
+            int lendable = totalLendable();
+            int demand = totalUnits(s);
+            if (lendable < demand) {
+                sensitivity.add(String.format("If the depots held ~%s more lendable units (i.e. roughly one more day of cover each), depot-only sourcing would reach 100%% and the vehicle would become pure backfill.",
+                        fmt(demand - lendable)));
+            }
+            if (runnerUp != null) {
+                sensitivity.add(String.format("The recommendation wins by INR %s. It would only lose if the depot legs or handling cost rose by more than that - roughly %dx their current level.",
+                        fmt(runnerUp.expectedCost - best.expectedCost),
+                        best.plan != null && best.plan.freightInr() > 0
+                                ? Math.max(2, (int) (1 + (runnerUp.expectedCost - best.expectedCost) / Math.max(1, best.plan.freightInr()))) : 2));
+            }
+        } else if (runnerUp != null) {
+            sensitivity.add(String.format("The recommendation wins by INR %s. Close that gap - a lower rate from %s, or a better on-time record - and the ranking flips.",
+                    fmt(runnerUp.expectedCost - best.expectedCost), runnerUp.provider));
+            sensitivity.add(String.format("Priority drives risk-aversion. If this were a routine (not %s) load, the variance penalty shrinks and the cheapest option would rank higher.",
+                    s.priority()));
+        }
+
+        // ── bottom line ──
+        String bottomLine;
+        if (distribution && best.plan != null) {
+            bottomLine = String.format(
+                    "Take \"%s\". It is the only option that serves %d%% of units inside their promise windows, and it is also the cheapest at INR %s all-in - the two usually trade off, and here they do not. The reason is structural: the vehicle physically cannot make the %sh %s window (earliest arrival ~%sh), so any vehicle-only plan forfeits that channel outright and eats the penalty. The depots CAN make it, but only hold %d%% of the load. Using each for what it is good at - depots for the urgent channels now, the recovered vehicle for the tolerant ones and to repay the depots at their own gate - covers everything and wastes nothing. %s",
+                    best.title, best.plan.fillPct(), fmt(best.expectedCost),
+                    fmt(tightestChannel(s) != null ? tightestChannel(s).maxDelayHrs() : 12),
+                    tightestChannel(s) != null ? tightestChannel(s).name() : "Qcommerce",
+                    fmt(round1(earliestTruckEta(all))), pct(totalLendable(), totalUnits(s)),
+                    runnerUp != null ? "It beats the next-best option by INR " + fmt(runnerUp.expectedCost - best.expectedCost) + "." : "");
+        } else {
+            bottomLine = String.format(
+                    "Take \"%s\". At %d%% on-time odds and %d%% reliability it carries the lowest risk-adjusted landed cost (INR %s). %s The decision is driven less by headline freight than by what it costs when the option fails - which is why the cheapest mover on the board is not the answer.",
+                    best.title, (int) Math.round(best.pOnTime * 100), best.reliability, fmt(best.expectedCost),
+                    runnerUp != null ? "It beats the runner-up (" + runnerUp.title + ") by INR "
+                            + fmt(runnerUp.expectedCost - best.expectedCost) + "." : "");
+        }
+
+        return new DecisionBrief(situation, binding, steps, head, decisive, assumptions,
+                notConsidered, sensitivity, bottomLine);
+    }
+
+    /** The concrete reason the winner beat this particular rival. */
+    private String whyNotChosen(Draft best, Draft d, boolean distribution) {
+        long delta = d.expectedCost - best.expectedCost;
+        StringBuilder b = new StringBuilder();
+
+        if (distribution && d.plan != null && best.plan != null) {
+            List<ChannelFill> missed = d.plan.channelTotals().stream()
+                    .filter(c -> c.fillPct() < 100).toList();
+            if (!missed.isEmpty()) {
+                String worst = missed.stream()
+                        .min((x, y) -> Integer.compare(x.fillPct(), y.fillPct()))
+                        .map(c -> c.channelName() + " at " + c.fillPct() + "%").orElse("");
+                b.append(String.format("Leaves %s short (worst: %s). ",
+                        missed.stream().map(ChannelFill::channel).reduce((x, y) -> x + ", " + y).orElse(""), worst));
+            }
+            if (d.plan.unfilledUnits() > 0) {
+                b.append(String.format("%s units go unserved this cycle. ", fmt(d.plan.unfilledUnits())));
+            }
+            if (d.plan.penaltyInr() > best.plan.penaltyInr()) {
+                b.append(String.format("That costs INR %s in channel penalties (vs INR %s). ",
+                        fmt(d.plan.penaltyInr()), fmt(best.plan.penaltyInr())));
+            }
+            if (d.plan.freightInr() < best.plan.freightInr()) {
+                b.append(String.format("It is INR %s cheaper to haul, but the penalty more than wipes that out. ",
+                        fmt(best.plan.freightInr() - d.plan.freightInr())));
+            }
+        } else {
+            if (d.spoilageEV > best.spoilageEV) {
+                b.append(String.format("Carries INR %s of spoilage / cold-chain write-off risk. ", fmt(d.spoilageEV)));
+            }
+            if (d.pOnTime < best.pOnTime) {
+                b.append(String.format("Only %d%% likely on time vs %d%%. ",
+                        (int) Math.round(d.pOnTime * 100), (int) Math.round(best.pOnTime * 100)));
+            }
+            if (d.reliability < best.reliability) {
+                b.append(String.format("Lower reliability (%d%% vs %d%%). ", d.reliability, best.reliability));
+            }
+            if (d.transport < best.transport) {
+                b.append(String.format("Cheaper to execute (INR %s vs INR %s) but the risk it carries costs more than it saves. ",
+                        fmt(d.transport), fmt(best.transport)));
+            }
+        }
+        b.append(String.format("Net: INR %s %s overall.", fmt(Math.abs(delta)),
+                delta >= 0 ? "more expensive" : "cheaper, but rejected on service"));
+        return b.toString().trim();
+    }
+
+    private int totalUnits(Shipment s) {
+        if (!s.hasDistributionPlan()) return 0;
+        return s.loadLines().stream().flatMap(l -> l.channels().values().stream())
+                .mapToInt(Integer::intValue).sum();
+    }
+
+    private int totalLendable() {
+        return erp.rdcs().stream()
+                .mapToInt(r -> planner.lendableBySku(r).values().stream().mapToInt(Integer::intValue).sum())
+                .sum();
+    }
+
+    /** The channel with the tightest promise window that actually has demand on this load. */
+    private SalesChannel tightestChannel(Shipment s) {
+        return erp.salesChannels().stream()
+                .filter(c -> channelDemand(s, c.code(), null) > 0)
+                .min((a, b) -> Double.compare(a.maxDelayHrs(), b.maxDelayHrs()))
+                .orElse(null);
+    }
+
+    /** Earliest any vehicle-based option can reach any city. */
+    private double earliestTruckEta(List<Draft> all) {
+        return all.stream()
+                .filter(d -> d.plan != null && ("REPAIR".equals(d.type) || "REPLACEMENT_TRANSPORTER".equals(d.type)))
+                .flatMap(d -> d.plan.sources().stream())
+                .mapToDouble(x -> x.etaHrs())
+                .min().orElse(0);
     }
 
     // ── evidence trail + signals strip ──

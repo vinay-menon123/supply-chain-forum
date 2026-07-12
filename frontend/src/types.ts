@@ -275,6 +275,32 @@ export interface Evidence {
   value: string;
   source: FactorSource;
 }
+// ── decision brief: how the engine got to its answer ──
+export interface DecisionStep {
+  step: number;
+  question: string;
+  finding: string;
+}
+export interface Comparison {
+  optionId: string;
+  title: string;
+  expectedCost: number;
+  deltaVsBest: number;
+  servicePct: number;
+  whyNotChosen: string;
+}
+export interface DecisionBrief {
+  situation: string;
+  bindingConstraints: string[];
+  howWeGotHere: DecisionStep[];
+  headToHead: Comparison[];
+  decisiveFactors: string[];
+  assumptions: string[];
+  notConsidered: string[];
+  whatWouldChangeIt: string[];
+  bottomLine: string;
+}
+
 export interface AgentRun {
   scenario: AgentScenario;
   signals: SignalView[];
@@ -282,6 +308,7 @@ export interface AgentRun {
   options: AgentOption[];
   recommendation: { optionId: string; title: string; rationale: string; evidence: Evidence[] };
   stakeholders: Stakeholder[];
+  brief: DecisionBrief;
   factorsConsidered: number;
   aiPowered: boolean;
   aiProvider: string;

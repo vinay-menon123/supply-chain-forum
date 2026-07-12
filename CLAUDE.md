@@ -176,9 +176,20 @@ original Node/Express/Prisma backend, which now lives only in git history.)
     - **Tunable modelling assumptions** (the Excel doesn't specify them; both live in the dataset, not the code):
       RDC `dailyDemandUnits` (derived: the load = 3 days of cover ⇒ daily = units/3) and the **channel priority /
       penalty-per-unit** ranking (Qc > Ec > MT > D2c > TT). Change these to change the allocation.
+  - **Decision brief (`AgentRun.brief`, added 2026-07-12).** The stats alone didn't tell an analyst *how* the call
+    was reached, so every run now emits a **fully deterministic** `DecisionBrief`: `situation`,
+    `bindingConstraints[]` (what actually limited us), `howWeGotHere[]` (a numbered question→finding reasoning
+    chain), `headToHead[]` (per rival option: expected cost, **rupee delta vs the winner**, service %, and a
+    concrete `whyNotChosen`), `decisiveFactors[]`, `assumptions[]` (the tunable levers), `notConsidered[]` (honest
+    limits — live traffic/spot rates/telematics/strike feeds), `whatWouldChangeIt[]` (computed sensitivity), and a
+    one-paragraph `bottomLine`. Derived from the same scored numbers, so **the brief can never disagree with the
+    recommendation**. NOTE: `decisiveFactors` ranks the cost-component gaps and only reports ones above a
+    materiality floor (`max(1000, 2% of best cost)`) — an early version proudly reported a ₹35 penalty gap as
+    "decisive" when the real driver was a ₹7,840 execution-cost gap. Rendered as a **"Decision rationale"** section
+    at the bottom of `/agents`.
   - Endpoints: `GET /api/agents/erp` (+aiEnabled/aiProvider), `POST /api/agents/run {shipmentId, disruption?}`
     → `AgentRun {scenario, signals[], agents[12|18], options[≤4], recommendation{…,evidence[]}, stakeholders[],
-    factorsConsidered, aiPowered, aiProvider}`. Auth-gated (run needs an active user). Frontend `pages/Agents.tsx`:
+    brief{…}, factorsConsidered, aiPowered, aiProvider}`. Auth-gated (run needs an active user). Frontend `pages/Agents.tsx`:
     intake box + shipment picker, live-signal strip, progressive agent trace with per-factor chips (impact colour +
     source tag), option cards with expandable **cost breakdown** + **channel-fill chips** + written summary,
     evidence trail, and for distribution loads a **fulfilment plan** (sources / per-city channel matrix / per-SKU

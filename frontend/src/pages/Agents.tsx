@@ -6,6 +6,7 @@ import type {
   AgentReport,
   AgentRun,
   ChannelFill,
+  DecisionBrief,
   ErpShipment,
   ErpSnapshot,
   Evidence,
@@ -536,6 +537,113 @@ function StakeholderPanel({ stakeholders }: { stakeholders: Stakeholder[] }) {
   );
 }
 
+/** The analyst's audit: how the engine actually got to its answer. */
+function DecisionRationale({ brief }: { brief: DecisionBrief }) {
+  const Block = ({
+    title,
+    tone,
+    items,
+  }: {
+    title: string;
+    tone: string;
+    items: string[];
+  }) =>
+    items.length === 0 ? null : (
+      <div>
+        <p className={`mb-1.5 text-[11px] font-semibold uppercase tracking-wider ${tone}`}>{title}</p>
+        <ul className="space-y-1.5">
+          {items.map((t, i) => (
+            <li key={i} className="flex gap-2 text-[12px] leading-relaxed text-[#8A8F98]">
+              <span className="flex-none text-[#5A6270]">•</span>
+              <span>{t}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+
+  return (
+    <div className="space-y-5">
+      {/* Bottom line first — the thing they'd ask for if they read nothing else */}
+      <div className="rounded-2xl border border-accent/30 bg-accent/[0.06] p-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-accent">The call, in one paragraph</p>
+        <p className="mt-1.5 text-sm leading-relaxed text-white/90">{brief.bottomLine}</p>
+      </div>
+
+      <div className="card">
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#8A8F98]">Situation</p>
+        <p className="text-[12px] leading-relaxed text-white/80">{brief.situation}</p>
+      </div>
+
+      {/* The reasoning chain */}
+      {brief.howWeGotHere.length > 0 && (
+        <div className="card">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#8A8F98]">
+            How we got here — the reasoning chain
+          </p>
+          <ol className="space-y-3">
+            {brief.howWeGotHere.map((s) => (
+              <li key={s.step} className="flex gap-3">
+                <span className="grid h-6 w-6 flex-none place-items-center rounded-md border border-white/10 bg-white/[0.04] text-[11px] font-bold text-accent">
+                  {s.step}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold text-white/90">{s.question}</p>
+                  <p className="mt-0.5 text-[12px] leading-relaxed text-[#8A8F98]">{s.finding}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/* Head to head */}
+      {brief.headToHead.length > 0 && (
+        <div className="card">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#8A8F98]">
+            Why not the others — head to head
+          </p>
+          <div className="space-y-2.5">
+            {brief.headToHead.map((c) => (
+              <div key={c.optionId} className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[12px] font-semibold text-white/90">{c.title}</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`badge ${fillTone(c.servicePct)} text-[10px]`}>{c.servicePct}% served</span>
+                    <span
+                      className={`badge text-[10px] ${
+                        c.deltaVsBest >= 0
+                          ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                      }`}
+                    >
+                      {c.deltaVsBest >= 0 ? "+" : "−"}
+                      {fmtInr(Math.abs(c.deltaVsBest))}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-[#8A8F98]">{c.whyNotChosen}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="card space-y-4">
+          <Block title="What tipped it" tone="text-emerald-300" items={brief.decisiveFactors} />
+          <Block title="What bound the decision" tone="text-amber-300" items={brief.bindingConstraints} />
+        </div>
+        <div className="card space-y-4">
+          <Block title="What would change the answer" tone="text-sky-300" items={brief.whatWouldChangeIt} />
+          <Block title="Assumptions (tunable)" tone="text-[#8A8F98]" items={brief.assumptions} />
+          <Block title="Not considered — honest limits" tone="text-[#5A6270]" items={brief.notConsidered} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EvidenceTrail({ evidence }: { evidence: Evidence[] }) {
   return (
     <div className="card !p-0 overflow-hidden">
@@ -848,7 +956,21 @@ export default function Agents() {
                         </div>
                       )}
 
-                      <p className="meta mt-4 text-center text-[11px]">
+                      {/* Decision rationale — the analyst's audit of how we got here */}
+                      {run.brief && (
+                        <div className="mt-10">
+                          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-[#8A8F98]">
+                            {run.stakeholders.length > 0 ? "6" : "4"}. Decision rationale
+                          </h2>
+                          <p className="meta mb-4 text-[11px]">
+                            How the engine reached this call — the constraints that bound it, what it compared,
+                            and what would change the answer.
+                          </p>
+                          <DecisionRationale brief={run.brief} />
+                        </div>
+                      )}
+
+                      <p className="meta mt-6 text-center text-[11px]">
                         Decision-support only — a human approves the final move. ERP is simulated; weather,
                         festival calendar and e-way-bill clock are live.
                       </p>
