@@ -5,15 +5,35 @@ import type {
   AgentOption,
   AgentReport,
   AgentRun,
+  ChannelFill,
   ErpShipment,
   ErpSnapshot,
   Evidence,
   FactorImpact,
   FactorSource,
+  FulfilmentPlan,
   SignalView,
+  Stakeholder,
 } from "../types";
 
 const fmtInr = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
+const fmtNum = (n: number) => Math.round(n).toLocaleString("en-IN");
+
+const fillTone = (pct: number) =>
+  pct >= 100
+    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+    : pct >= 60
+    ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+    : pct > 0
+    ? "border-orange-500/30 bg-orange-500/10 text-orange-300"
+    : "border-rose-500/30 bg-rose-500/10 text-rose-300";
+
+const urgencyTone = (u: string) =>
+  u === "IMMEDIATE"
+    ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+    : u === "NEXT_CYCLE"
+    ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+    : "border-white/10 bg-white/5 text-[#8A8F98]";
 
 const priorityChip = (p: string) =>
   p === "CRITICAL"
@@ -51,6 +71,10 @@ const optionTypeLabel: Record<string, string> = {
   MODE_RAIL: "Mode-shift · rail",
   MODE_AIR: "Mode-shift · air",
   ALT_DC: "Alt-DC re-fulfill",
+  REPLACEMENT_TRANSPORTER: "Replacement transporter",
+  RDC_NEAR: "Nearest depot",
+  RDC_POOL: "Depot network",
+  HYBRID: "Depot + vehicle (hybrid)",
 };
 
 function SourceTag({ source }: { source: FactorSource }) {
@@ -239,7 +263,7 @@ function OptionCard({ o, rank }: { o: AgentOption; rank: number }) {
         <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] py-1.5">
           <div className="text-sm font-semibold text-white">{o.etaHours}h</div>
           <div className={`text-[10px] ${o.onTime ? "text-emerald-400" : "text-rose-400"}`}>
-            {o.onTimeProbPct}% on-time
+            {o.plan ? `${o.onTimeProbPct}% fill` : `${o.onTimeProbPct}% on-time`}
           </div>
         </div>
         <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] py-1.5">
@@ -251,6 +275,27 @@ function OptionCard({ o, rank }: { o: AgentOption; rank: number }) {
           <div className="text-[10px] text-[#8A8F98]">kg CO₂</div>
         </div>
       </div>
+
+      {/* Channel fill — the distributor's answer: who actually gets served */}
+      {o.plan && (
+        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5">
+          <p className="mb-1.5 text-[10px] uppercase tracking-wider text-[#5A6270]">
+            Channel fill inside promise window
+          </p>
+          <ChannelChips channels={o.plan.channelTotals} />
+          {o.plan.unfilledUnits > 0 && (
+            <p className="mt-1.5 text-[11px] text-rose-300">
+              {fmtNum(o.plan.unfilledUnits)} units roll to the next replenishment
+            </p>
+          )}
+        </div>
+      )}
+
+      {o.summary && (
+        <p className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5 text-[11px] leading-relaxed text-[#8A8F98]">
+          {o.summary}
+        </p>
+      )}
 
       {/* Expected landed cost + breakdown */}
       <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5">
@@ -292,6 +337,201 @@ function OptionCard({ o, rank }: { o: AgentOption; rank: number }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Per-channel fill chips — the "who gets served" answer at a glance. */
+function ChannelChips({ channels }: { channels: ChannelFill[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {channels.map((c) => (
+        <span
+          key={c.channel}
+          title={`${c.channelName}: ${fmtNum(c.onTimeUnits)}/${fmtNum(c.demand)} units inside a ${c.promiseHrs}h promise`}
+          className={`badge ${fillTone(c.fillPct)} text-[10px]`}
+        >
+          {c.channel} {c.fillPct}%
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PlanDetail({ plan }: { plan: FulfilmentPlan }) {
+  return (
+    <div className="space-y-4">
+      {/* Sources */}
+      <div className="card !p-0 overflow-hidden">
+        <p className="border-b border-white/[0.06] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[#8A8F98]">
+          Where each city's units come from
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-[11px]">
+            <thead className="text-[#5A6270]">
+              <tr className="border-b border-white/[0.04]">
+                <th className="px-4 py-2 text-left font-medium">Source</th>
+                <th className="px-4 py-2 text-left font-medium">To</th>
+                <th className="px-4 py-2 text-right font-medium">Units</th>
+                <th className="px-4 py-2 text-right font-medium">ETA</th>
+                <th className="px-4 py-2 text-right font-medium">Freight</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plan.sources.map((s, i) => (
+                <tr key={i} className="border-b border-white/[0.03] last:border-0">
+                  <td className="px-4 py-2">
+                    <span className={`badge ${s.kind === "RDC" ? "border-sky-500/30 bg-sky-500/10 text-sky-300" : "border-white/10 bg-white/5 text-[#8A8F98]"} mr-1.5 text-[9px]`}>
+                      {s.kind}
+                    </span>
+                    <span className="text-white/85">{s.source}</span>
+                  </td>
+                  <td className="px-4 py-2 text-[#8A8F98]">{s.city}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-white/85">{fmtNum(s.units)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-[#8A8F98]">{s.etaHrs}h</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-[#8A8F98]">{fmtInr(s.freightInr)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Channel fill per city */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {plan.cities.map((city) => (
+          <div key={city.city} className="card !p-0 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#8A8F98]">{city.city}</p>
+              <span className={`badge ${fillTone(city.fillPct)} text-[10px]`}>
+                {city.fillPct}% in window
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[380px] text-[11px]">
+                <thead className="text-[#5A6270]">
+                  <tr className="border-b border-white/[0.04]">
+                    <th className="px-3 py-2 text-left font-medium">Channel</th>
+                    <th className="px-3 py-2 text-right font-medium">Demand</th>
+                    <th className="px-3 py-2 text-right font-medium">Served</th>
+                    <th className="px-3 py-2 text-right font-medium">Fill</th>
+                    <th className="px-3 py-2 text-right font-medium">ETA / promise</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {city.channels.map((c) => (
+                    <tr key={c.channel} className="border-b border-white/[0.03] last:border-0">
+                      <td className="px-3 py-2 text-white/85">
+                        {c.channel} <span className="text-[#5A6270]">{c.channelName}</span>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-[#8A8F98]">{fmtNum(c.demand)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-white/85">{fmtNum(c.onTimeUnits)}</td>
+                      <td className="px-3 py-2 text-right">
+                        <span className={`badge ${fillTone(c.fillPct)} text-[10px]`}>{c.fillPct}%</span>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-[#8A8F98]">
+                        {c.etaHrs}h / {c.promiseHrs}h
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-SKU + backfill */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="card !p-0 overflow-hidden">
+          <p className="border-b border-white/[0.06] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[#8A8F98]">
+            Per-SKU sourcing split
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[360px] text-[11px]">
+              <thead className="text-[#5A6270]">
+                <tr className="border-b border-white/[0.04]">
+                  <th className="px-3 py-2 text-left font-medium">SKU</th>
+                  <th className="px-3 py-2 text-right font-medium">Demand</th>
+                  <th className="px-3 py-2 text-right font-medium">From depot</th>
+                  <th className="px-3 py-2 text-right font-medium">From vehicle</th>
+                  <th className="px-3 py-2 text-right font-medium">Short</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.skus.map((s) => (
+                  <tr key={s.sku} className="border-b border-white/[0.03] last:border-0">
+                    <td className="px-3 py-2 text-white/85" title={s.name}>{s.sku}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-[#8A8F98]">{fmtNum(s.demand)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-sky-300">{fmtNum(s.fromRdc)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-white/70">{fmtNum(s.fromTruck)}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${s.unfilled > 0 ? "text-rose-300" : "text-[#5A6270]"}`}>
+                      {fmtNum(s.unfilled)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card !p-0 overflow-hidden">
+          <p className="border-b border-white/[0.06] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[#8A8F98]">
+            Depot draw-down &amp; backfill
+          </p>
+          {plan.backfills.length === 0 ? (
+            <p className="px-4 py-3 text-[11px] text-[#8A8F98]">No depot stock used — nothing to backfill.</p>
+          ) : (
+            <ul>
+              {plan.backfills.map((b, i) => (
+                <li key={i} className="border-b border-white/[0.04] px-4 py-2.5 last:border-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-medium text-white/85">{b.rdc}</span>
+                    <span
+                      className={`badge ${
+                        b.unitsRepaid >= b.unitsLent
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                          : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                      } text-[10px]`}
+                    >
+                      lent {fmtNum(b.unitsLent)} · repaid {fmtNum(b.unitsRepaid)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-snug text-[#8A8F98]">{b.note}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StakeholderPanel({ stakeholders }: { stakeholders: Stakeholder[] }) {
+  const order = { IMMEDIATE: 0, NEXT_CYCLE: 1, FYI: 2 } as Record<string, number>;
+  const sorted = [...stakeholders].sort((a, b) => (order[a.urgency] ?? 3) - (order[b.urgency] ?? 3));
+  return (
+    <div className="card !p-0 overflow-hidden">
+      <p className="border-b border-white/[0.06] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[#8A8F98]">
+        Who to tell — {stakeholders.length} departments
+      </p>
+      <ul>
+        {sorted.map((s, i) => (
+          <li
+            key={i}
+            className="flex flex-wrap items-start justify-between gap-2 border-b border-white/[0.04] px-4 py-2.5 last:border-0"
+          >
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-white/85">{s.department}</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-[#8A8F98]">{s.action}</p>
+            </div>
+            <span className={`badge ${urgencyTone(s.urgency)} flex-none text-[10px]`}>
+              {s.urgency.replace("_", " ")}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -380,6 +620,7 @@ export default function Agents() {
 
   const selected = snapshot?.shipments.find((s) => s.id === selectedId) ?? null;
   const optionsReady = run && revealed >= run.agents.length;
+  const recommendedPlan = run?.options.find((o) => o.recommended)?.plan ?? null;
 
   return (
     <div>
@@ -586,6 +827,27 @@ export default function Agents() {
                           <OptionCard key={o.id} o={o} rank={i + 1} />
                         ))}
                       </div>
+
+                      {/* Distribution plan for the recommended option */}
+                      {recommendedPlan && (
+                        <div className="mt-8">
+                          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[#8A8F98]">
+                            4. Fulfilment plan —{" "}
+                            <span className="text-white/80">{run.recommendation.title}</span>
+                          </h2>
+                          <PlanDetail plan={recommendedPlan} />
+                        </div>
+                      )}
+
+                      {run.stakeholders.length > 0 && (
+                        <div className="mt-8">
+                          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[#8A8F98]">
+                            5. Notify the network
+                          </h2>
+                          <StakeholderPanel stakeholders={run.stakeholders} />
+                        </div>
+                      )}
+
                       <p className="meta mt-4 text-center text-[11px]">
                         Decision-support only — a human approves the final move. ERP is simulated; weather,
                         festival calendar and e-way-bill clock are live.

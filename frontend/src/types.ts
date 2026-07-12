@@ -152,10 +152,84 @@ export interface CostLine {
   label: string;
   amount: number;
 }
+
+// ── distribution / demand side (multi-drop SKU x channel consignments) ──
+export interface ChannelFill {
+  channel: string;
+  channelName: string;
+  demand: number;
+  onTimeUnits: number;
+  lateUnits: number;
+  unfilledUnits: number;
+  fillPct: number;
+  etaHrs: number;
+  promiseHrs: number;
+  penaltyInr: number;
+  verdict: string;
+}
+export interface CityPlan {
+  city: string;
+  demand: number;
+  onTimeUnits: number;
+  fillPct: number;
+  etaHrs: number;
+  channels: ChannelFill[];
+}
+export interface SkuPlan {
+  sku: string;
+  name: string;
+  demand: number;
+  fromRdc: number;
+  fromTruck: number;
+  unfilled: number;
+  fillPct: number;
+}
+export interface SourceLine {
+  source: string;
+  kind: "RDC" | "TRUCK" | string;
+  city: string;
+  units: number;
+  etaHrs: number;
+  freightInr: number;
+}
+export interface Backfill {
+  rdc: string;
+  unitsLent: number;
+  unitsRepaid: number;
+  repaidInHrs: number;
+  note: string;
+}
+export interface FulfilmentPlan {
+  strategyId: string;
+  totalDemand: number;
+  onTimeUnits: number;
+  lateUnits: number;
+  unfilledUnits: number;
+  fillPct: number;
+  freightInr: number;
+  penaltyInr: number;
+  handlingInr: number;
+  totalCostInr: number;
+  cities: CityPlan[];
+  channelTotals: ChannelFill[];
+  skus: SkuPlan[];
+  sources: SourceLine[];
+  backfills: Backfill[];
+  summary: string;
+}
+export interface Stakeholder {
+  department: string;
+  scope: string;
+  action: string;
+  urgency: "IMMEDIATE" | "NEXT_CYCLE" | "FYI" | string;
+}
+
 export interface AgentOption {
   id: string;
   title: string;
-  type: "EXTERNAL_CARRIER" | "OWN_FLEET" | "REPAIR" | "ROUTE_CHANGE" | "MODE_RAIL" | "MODE_AIR" | "ALT_DC" | string;
+  type:
+    | "EXTERNAL_CARRIER" | "OWN_FLEET" | "REPAIR" | "ROUTE_CHANGE" | "MODE_RAIL" | "MODE_AIR" | "ALT_DC"
+    | "REPLACEMENT_TRANSPORTER" | "RDC_NEAR" | "RDC_POOL" | "HYBRID" | string;
   provider: string;
   etaHours: number;
   onTime: boolean;
@@ -166,9 +240,11 @@ export interface AgentOption {
   co2Kg: number;
   score: number;
   recommended: boolean;
+  summary: string | null;
   pros: string[];
   cons: string[];
   risks: string[];
+  plan: FulfilmentPlan | null;
 }
 export interface SignalView {
   kind: "WEATHER" | "FESTIVAL" | "EWAYBILL" | "BLOCKAGE" | string;
@@ -205,6 +281,7 @@ export interface AgentRun {
   agents: AgentReport[];
   options: AgentOption[];
   recommendation: { optionId: string; title: string; rationale: string; evidence: Evidence[] };
+  stakeholders: Stakeholder[];
   factorsConsidered: number;
   aiPowered: boolean;
   aiProvider: string;

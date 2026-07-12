@@ -1,5 +1,9 @@
 package com.cscen.forum.service;
 
+import com.cscen.forum.service.agents.DistributionPlanner;
+import com.cscen.forum.service.agents.DistributionPlanner.ChannelFill;
+import com.cscen.forum.service.agents.DistributionPlanner.FulfilmentPlan;
+import com.cscen.forum.service.agents.DistributionPlanner.Supply;
 import com.cscen.forum.service.agents.ExternalSignals;
 import com.cscen.forum.service.agents.ExternalSignals.EwayBillSignal;
 import com.cscen.forum.service.agents.ExternalSignals.FestivalSignal;
@@ -8,10 +12,15 @@ import com.cscen.forum.service.erp.ErpPort;
 import com.cscen.forum.service.erp.ErpPort.Advisory;
 import com.cscen.forum.service.erp.ErpPort.Carrier;
 import com.cscen.forum.service.erp.ErpPort.City;
+import com.cscen.forum.service.erp.ErpPort.Department;
 import com.cscen.forum.service.erp.ErpPort.DistributionCentre;
 import com.cscen.forum.service.erp.ErpPort.Lane;
+import com.cscen.forum.service.erp.ErpPort.Rdc;
+import com.cscen.forum.service.erp.ErpPort.RdcLeg;
+import com.cscen.forum.service.erp.ErpPort.SalesChannel;
 import com.cscen.forum.service.erp.ErpPort.ServicePoint;
 import com.cscen.forum.service.erp.ErpPort.Shipment;
+import com.cscen.forum.service.erp.ErpPort.Transporter;
 import com.cscen.forum.service.erp.ErpPort.Vehicle;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,7 +29,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -56,17 +67,22 @@ public class AgentOrchestrator {
     // key-account / CRITICAL load won't be gambled to shave transport cost.
     private static final double SERVICE_RISK_FRACTION = 0.06;
 
-    // How many discrete factors the full catalog spans (surfaced selectively per run).
+    // How many discrete factors the catalog spans (surfaced selectively per run). A
+    // multi-drop SKU x channel consignment also brings the demand-side domains into play.
     private static final int FACTOR_CATALOG_SIZE = 118;
+    private static final int FACTOR_CATALOG_SIZE_DISTRIBUTION = 158;
 
     private final ErpPort erp;
     private final ExternalSignals signals;
+    private final DistributionPlanner planner;
     private final AgentAiClient ai;
     private final ObjectMapper mapper;
 
-    public AgentOrchestrator(ErpPort erp, ExternalSignals signals, AgentAiClient ai, ObjectMapper mapper) {
+    public AgentOrchestrator(ErpPort erp, ExternalSignals signals, DistributionPlanner planner,
+                             AgentAiClient ai, ObjectMapper mapper) {
         this.erp = erp;
         this.signals = signals;
+        this.planner = planner;
         this.ai = ai;
         this.mapper = mapper;
     }
@@ -84,8 +100,12 @@ public class AgentOrchestrator {
     public record OptionView(String id, String title, String type, String provider,
                              double etaHours, boolean onTime, int onTimeProbPct, int reliabilityPct,
                              long expectedCost, List<CostLine> costBreakdown, double co2Kg,
-                             int score, boolean recommended,
-                             List<String> pros, List<String> cons, List<String> risks) {}
+                             int score, boolean recommended, String summary,
+                             List<String> pros, List<String> cons, List<String> risks,
+                             FulfilmentPlan plan) {}
+
+    /** One department that must be told, and what it has to do. */
+    public record Stakeholder(String department, String scope, String action, String urgency) {}
 
     public record SignalView(String kind, String label, String detail, String source, String impact) {}
 
@@ -100,7 +120,8 @@ public class AgentOrchestrator {
 
     public record AgentRun(ScenarioView scenario, List<SignalView> signals, List<AgentReport> agents,
                            List<OptionView> options, Recommendation recommendation,
-                           int factorsConsidered, boolean aiPowered, String aiProvider) {}
+                           List<Stakeholder> stakeholders, int factorsConsidered,
+                           boolean aiPowered, String aiProvider) {}
 
     public boolean isAiEnabled() { return ai.isEnabled(); }
 
@@ -123,6 +144,9 @@ public class AgentOrchestrator {
         List<String> pros = new ArrayList<>();
         List<String> cons = new ArrayList<>();
         List<String> risks = new ArrayList<>();
+        // distribution-side (null on simple single-drop shipments)
+        FulfilmentPlan plan;
+        long fixedCost;   // repair / cross-dock / mobilisation, on top of the plan's freight
     }
 
     /** Gathered context for a run — read once, shared by every agent. */
@@ -143,7 +167,8 @@ public class AgentOrchestrator {
                 : disruptionInput.trim();
 
         Ctx ctx = gather(s);
-        List<Draft> drafts = buildStrategies(ctx);
+        boolean distribution = s.hasDistributionPlan();
+        List<Draft> drafts = distribution ? buildDistributionStrategies(ctx) : buildStrategies(ctx);
         scoreAndRank(ctx, drafts);
 
         List<Draft> top = drafts.stream().limit(4).toList();
@@ -156,7 +181,11 @@ public class AgentOrchestrator {
         ScenarioView scenario = buildScenario(ctx, disruption);
         List<SignalView> sig = buildSignals(ctx);
         List<AgentReport> agents = buildAgents(ctx, drafts, top);
+        if (distribution) {
+            agents = spliceDistributionAgents(agents, ctx, drafts, best);
+        }
         List<Evidence> evidence = buildEvidence(ctx, best);
+        List<Stakeholder> stakeholders = distribution ? buildStakeholders(best) : List.of();
 
         // Templated narrative first (always works), then enrich with AI.
         String rationale = templatedRationale(ctx, best);
@@ -169,7 +198,9 @@ public class AgentOrchestrator {
         }
 
         Recommendation rec = new Recommendation(best.id, best.title, rationale, evidence);
-        return new AgentRun(scenario, sig, agents, options, rec, FACTOR_CATALOG_SIZE, aiPowered, aiProvider());
+        return new AgentRun(scenario, sig, agents, options, rec, stakeholders,
+                distribution ? FACTOR_CATALOG_SIZE_DISTRIBUTION : FACTOR_CATALOG_SIZE,
+                aiPowered, aiProvider());
     }
 
     // ── 1. gather context (ERP + live signals) ──
@@ -382,6 +413,230 @@ public class AgentOrchestrator {
         return drafts;
     }
 
+    // ── 2b. distribution-side strategies (multi-drop, SKU x channel consignments) ──
+
+    /** Hours to mobilise a replacement vehicle to the breakdown point, and to cross-dock. */
+    private static final double MOBILISE_HRS = 4.0;
+    private static final double CROSSDOCK_HRS = 2.5;
+    private static final long CROSSDOCK_COST = 8000L;
+
+    /**
+     * For a stranded multi-drop consignment the stock is not lost, it is late. So the
+     * strategies are about <b>where each city's units come from</b>: the truck itself
+     * (slow, 100%), a nearby RDC that can lend (fast, partial), or both — with the
+     * recovered load repaying the RDC.
+     */
+    private List<Draft> buildDistributionStrategies(Ctx ctx) {
+        Shipment s = ctx.s();
+        List<String> cities = planner.destinations(s);
+        String nearCity = s.breakdownNearCity() != null ? s.breakdownNearCity() : s.origin();
+        Rdc nearRdc = erp.findRdc(nearCity).orElse(null);
+        double trunkRate = s.freightRatePerKg() > 0 ? s.freightRatePerKg() : 8.0;
+        double laneKm = ctx.laneKm();
+
+        // Remaining legs from the breakdown point. If we broke down next to an RDC, its
+        // outbound legs ARE our remaining legs.
+        Map<String, Double> legHrs = new LinkedHashMap<>();
+        Map<String, Double> legKm = new LinkedHashMap<>();
+        if (nearRdc != null) {
+            for (RdcLeg l : nearRdc.legs()) {
+                if (cities.contains(l.toCity())) {
+                    legHrs.put(l.toCity(), l.transitHrs());
+                    legKm.put(l.toCity(), l.distanceKm());
+                }
+            }
+        }
+        for (String c : cities) {
+            legHrs.putIfAbsent(c, s.remainingKm() / SPEED_KMPH);
+            legKm.putIfAbsent(c, s.remainingKm());
+        }
+        // The truck's remaining leg is priced pro-rata off the trunk rate (it is already loaded).
+        Map<String, Double> truckRate = new LinkedHashMap<>();
+        for (String c : cities) truckRate.put(c, round2(trunkRate * (legKm.get(c) / Math.max(1, laneKm))));
+
+        // Repair economics at the breakdown point.
+        String issue = s.breakdownIssue() == null ? "" : s.breakdownIssue().toLowerCase();
+        boolean heavy = issue.contains("engine") || issue.contains("gearbox") || issue.contains("axle");
+        double repairHrs = heavy ? 7.0 : 3.5;
+        long repairCost = heavy ? 28000L : 9000L;
+        ServicePoint sp = erp.findServicePoint(nearCity).orElse(null);
+        boolean canHeavy = sp != null && sp.heavyRepair();
+        if (heavy && !canHeavy) { repairHrs += 4; repairCost += 15000; }
+
+        List<Draft> drafts = new ArrayList<>();
+        char letter = 'A';
+
+        // RDC supplies (fast, partial).
+        List<Supply> rdcSupplies = new ArrayList<>();
+        Supply nearSupply = null;
+        for (Rdc r : erp.rdcs()) {
+            Optional<Supply> sup = planner.rdcSupply(r, s, ctx.extDelay());
+            if (sup.isEmpty()) continue;
+            rdcSupplies.add(sup.get());
+            if (r.city().equalsIgnoreCase(nearCity)) nearSupply = sup.get();
+        }
+
+        // A) Repair the vehicle and complete the run (100% of units, but slow).
+        {
+            Map<String, Double> eta = new LinkedHashMap<>();
+            for (String c : cities) eta.put(c, round1(repairHrs + legHrs.get(c) + ctx.extDelay()));
+            Supply truck = planner.truckSupply("Recovered vehicle", s, eta, truckRate);
+            Draft d = new Draft();
+            d.id = String.valueOf(letter++);
+            d.type = "REPAIR";
+            d.provider = "On-site repair - " + (ctx.veh() != null ? ctx.veh().plate() : s.vehicleId());
+            d.title = "Repair the vehicle & complete the run";
+            d.plan = planner.plan(d.id, s, List.of(truck));
+            d.fixedCost = repairCost;
+            d.etaMean = eta.values().stream().mapToDouble(Double::doubleValue).max().orElse(0);
+            d.etaSigma = ctx.extSigma() + repairHrs * 0.25;
+            d.reliability = clampRel(REPAIR_RELIABILITY - ctx.advisorySevPenalty());
+            d.co2Kg = round1(s.remainingKm() * CO2_TRUCK);
+            d.pros.add("Every unit is already on the vehicle - 100% of the load eventually lands");
+            d.pros.add("No stock transfer, no RDC draw-down, no backfill to unwind");
+            d.cons.add("~" + fmt(round1(repairHrs)) + "h stationary" + (canHeavy ? " (heavy-repair bay on site)" : " (no heavy bay - tow/mobile crew)"));
+            d.risks.add("Same unit - residual risk of repeat failure");
+            drafts.add(d);
+        }
+
+        // B) Cross-dock onto a replacement transporter from the master (best of the pool).
+        List<Transporter> pool = erp.transportersForLane(s.route());
+        Transporter bestT = null;
+        Draft bestTDraft = null;
+        for (Transporter t : pool) {
+            Map<String, Double> eta = new LinkedHashMap<>();
+            for (String c : cities) {
+                double legTransit = t.transitHrs() * (legKm.get(c) / Math.max(1, laneKm));
+                eta.put(c, round1(MOBILISE_HRS + CROSSDOCK_HRS + legTransit + ctx.extDelay()));
+            }
+            Map<String, Double> rate = new LinkedHashMap<>();
+            for (String c : cities) rate.put(c, round2(t.ratePerKg() * (legKm.get(c) / Math.max(1, laneKm))));
+            Supply truck = planner.truckSupply("Replacement - " + t.name(), s, eta, rate);
+            Draft d = new Draft();
+            d.type = "REPLACEMENT_TRANSPORTER";
+            d.provider = t.name() + " @ INR " + fmt(t.ratePerKg()) + "/kg";
+            d.title = "Cross-dock to " + t.name() + " (replacement vehicle)";
+            d.plan = planner.plan("X", s, List.of(truck));
+            d.fixedCost = CROSSDOCK_COST;
+            d.etaMean = eta.values().stream().mapToDouble(Double::doubleValue).max().orElse(0);
+            d.etaSigma = ctx.extSigma() + 0.8;
+            d.reliability = clampRel(t.reliabilityPct() - ctx.advisorySevPenalty());
+            d.co2Kg = round1(s.remainingKm() * CO2_TRUCK);
+            long cost = d.fixedCost + d.plan.totalCostInr();
+            if (bestTDraft == null || cost < bestTDraft.fixedCost + bestTDraft.plan.totalCostInr()) {
+                bestTDraft = d;
+                bestT = t;
+            }
+        }
+        if (bestTDraft != null && bestT != null) {
+            bestTDraft.id = String.valueOf(letter++);
+            bestTDraft.plan = planner.plan(bestTDraft.id, s, List.of(
+                    planner.truckSupply("Replacement - " + bestT.name(), s,
+                            etaFor(bestT, cities, legKm, laneKm, ctx.extDelay()),
+                            rateFor(bestT, cities, legKm, laneKm))));
+            bestTDraft.pros.add("Full load moves - no partial fill, no RDC draw-down");
+            bestTDraft.pros.add("Best of " + pool.size() + " transporters on the lane at INR " + fmt(bestT.ratePerKg()) + "/kg");
+            bestTDraft.cons.add("Cross-dock at the breakdown point (+" + fmt(CROSSDOCK_HRS) + "h) and a mobilisation wait");
+            drafts.add(bestTDraft);
+        }
+
+        // C) Nearest RDC alone - can the depot next door actually cover us?
+        if (nearSupply != null) {
+            Draft d = new Draft();
+            d.id = String.valueOf(letter++);
+            d.type = "RDC_NEAR";
+            d.provider = nearCity + " RDC";
+            d.title = "Source from the " + nearCity + " RDC (nearest depot)";
+            d.plan = planner.plan(d.id, s, List.of(nearSupply));
+            d.fixedCost = 0;
+            d.etaMean = nearSupply.etaByCity().values().stream().mapToDouble(Double::doubleValue).max().orElse(0);
+            d.etaSigma = ctx.extSigma() * 0.6 + 0.5;
+            d.reliability = clampRel(92 - ctx.advisorySevPenalty());
+            d.co2Kg = round1(shortHaulCo2(nearSupply, d.plan));
+            d.pros.add("Stock is already picked and at the dock - fastest possible to shelf");
+            d.pros.add("Depot sits at the breakdown point - shortest legs in the network");
+            d.cons.add("Only lends what it can spare before its own replenishment lands");
+            d.risks.add("Draws down " + nearCity + " cover - needs a backfill");
+            drafts.add(d);
+        }
+
+        // D) Both RDCs - pool the network's spare cover.
+        if (rdcSupplies.size() > 1) {
+            Draft d = new Draft();
+            d.id = String.valueOf(letter++);
+            d.type = "RDC_POOL";
+            d.provider = rdcSupplies.stream().map(Supply::name).reduce((a, b) -> a + " + " + b).orElse("RDCs");
+            d.title = "Pool both RDCs (" + rdcSupplies.size() + " depots)";
+            d.plan = planner.plan(d.id, s, rdcSupplies);
+            d.fixedCost = 0;
+            d.etaMean = rdcSupplies.stream().flatMap(x -> x.etaByCity().values().stream())
+                    .mapToDouble(Double::doubleValue).max().orElse(0);
+            d.etaSigma = ctx.extSigma() * 0.6 + 0.6;
+            d.reliability = clampRel(90 - ctx.advisorySevPenalty());
+            d.co2Kg = round1(shortHaulCo2Pool(rdcSupplies, d.plan));
+            d.pros.add("Each city is served from whichever depot is closest to it");
+            d.pros.add("Covers the urgent channels far inside their promise windows");
+            d.cons.add("Still cannot cover the whole load - the balance waits for the vehicle");
+            d.risks.add("Draws down cover at both depots - both need backfilling");
+            drafts.add(d);
+        }
+
+        // E) HYBRID - RDCs serve the urgent channels now, the recovered load follows and
+        //    repays the depots. This is usually the right answer when the breakdown is
+        //    next to a stocking RDC.
+        if (!rdcSupplies.isEmpty()) {
+            Map<String, Double> eta = new LinkedHashMap<>();
+            for (String c : cities) eta.put(c, round1(repairHrs + legHrs.get(c) + ctx.extDelay()));
+            Supply truck = planner.truckSupply("Recovered vehicle", s, eta, truckRate);
+            List<Supply> all = new ArrayList<>(rdcSupplies);
+            all.add(truck);
+            Draft d = new Draft();
+            d.id = String.valueOf(letter++);
+            d.type = "HYBRID";
+            d.provider = "RDC pool + recovered vehicle";
+            d.title = "Hybrid: RDCs cover urgent channels now, recovered load backfills";
+            d.plan = planner.plan(d.id, s, all);
+            d.fixedCost = repairCost;
+            d.etaMean = eta.values().stream().mapToDouble(Double::doubleValue).max().orElse(0);
+            d.etaSigma = ctx.extSigma() * 0.7 + 0.6;
+            d.reliability = clampRel(90 - ctx.advisorySevPenalty());
+            d.co2Kg = round1(s.remainingKm() * CO2_TRUCK + shortHaulCo2Pool(rdcSupplies, d.plan));
+            d.pros.add("Time-critical channels are served from the depot in hours, not a day");
+            d.pros.add("The recovered load repays the depots at the gate - little extra freight");
+            d.pros.add("100% of demand is eventually covered - nothing is written off");
+            d.cons.add("Two-wave execution - ops must handle a split inbound");
+            drafts.add(d);
+        }
+
+        return drafts;
+    }
+
+    private Map<String, Double> etaFor(Transporter t, List<String> cities, Map<String, Double> legKm,
+                                       double laneKm, double extDelay) {
+        Map<String, Double> eta = new LinkedHashMap<>();
+        for (String c : cities) {
+            double legTransit = t.transitHrs() * (legKm.get(c) / Math.max(1, laneKm));
+            eta.put(c, round1(MOBILISE_HRS + CROSSDOCK_HRS + legTransit + extDelay));
+        }
+        return eta;
+    }
+
+    private Map<String, Double> rateFor(Transporter t, List<String> cities, Map<String, Double> legKm, double laneKm) {
+        Map<String, Double> rate = new LinkedHashMap<>();
+        for (String c : cities) rate.put(c, round2(t.ratePerKg() * (legKm.get(c) / Math.max(1, laneKm))));
+        return rate;
+    }
+
+    private double shortHaulCo2(Supply sup, FulfilmentPlan plan) {
+        double km = plan.sources().stream().filter(x -> x.source().equals(sup.name()))
+                .mapToDouble(x -> 1).sum();
+        return km * 200 * CO2_TRUCK; // one short-haul vehicle per served city
+    }
+
+    private double shortHaulCo2Pool(List<Supply> sups, FulfilmentPlan plan) {
+        return sups.stream().mapToDouble(x -> shortHaulCo2(x, plan)).sum();
+    }
+
     // ── 3. price + rank every option (risk-adjusted expected landed cost) ──
 
     private void scoreAndRank(Ctx ctx, List<Draft> drafts) {
@@ -389,6 +644,32 @@ public class AgentOrchestrator {
         double priorityWeight = priorityWeight(s.priority());
 
         for (Draft d : drafts) {
+            // Distribution options are priced at the UNIT level by the planner: the service
+            // miss is already a real rupee penalty per unfilled/late unit, so we use that
+            // instead of the value-fraction service-risk heuristic (no double counting).
+            if (d.plan != null) {
+                FulfilmentPlan p = d.plan;
+                d.pOnTime = clampP(p.fillPct() / 100.0);
+                d.onTime = p.fillPct() >= 100;
+                d.penaltyEV = p.penaltyInr();
+                d.serviceRisk = 0;
+                d.stockoutEV = 0;
+                d.spoilageEV = 0;
+                d.co2Cost = Math.round(d.co2Kg * CARBON_PRICE);
+                d.transport = d.fixedCost + p.freightInr() + p.handlingInr();
+                d.expectedCost = d.transport + d.penaltyEV + d.co2Cost;
+                d.costSigma = p.penaltyInr() * 0.25 + s.penaltyPerHourInr() * d.etaSigma;
+                d.riskAdjusted = d.expectedCost + LAMBDA * priorityWeight * d.costSigma;
+
+                if (p.unfilledUnits() > 0) {
+                    d.risks.add(0, fmt(p.unfilledUnits()) + " units cannot be covered in this window");
+                }
+                p.channelTotals().stream().filter(c -> c.fillPct() < 100).forEach(c ->
+                        d.risks.add(c.channel() + " (" + c.channelName() + ") only " + c.fillPct()
+                                + "% filled inside its " + fmt(c.promiseHrs()) + "h promise"));
+                continue;
+            }
+
             double z = (s.slaHoursRemaining() - d.etaMean) / Math.max(0.3, d.etaSigma);
             d.pOnTime = clampP(Phi(z));
             d.onTime = d.etaMean <= s.slaHoursRemaining();
@@ -466,15 +747,23 @@ public class AgentOrchestrator {
 
     private OptionView toView(Draft d, boolean recommended) {
         List<CostLine> breakdown = new ArrayList<>();
-        breakdown.add(new CostLine("Transport / execution", d.transport));
-        if (d.penaltyEV > 0) breakdown.add(new CostLine("Expected SLA penalty", d.penaltyEV));
-        if (d.stockoutEV > 0) breakdown.add(new CostLine("Stock-out exposure", d.stockoutEV));
-        if (d.spoilageEV > 0) breakdown.add(new CostLine("Spoilage / cold-chain", d.spoilageEV));
-        if (d.serviceRisk > 0) breakdown.add(new CostLine("Service-risk (miss x unreliability)", d.serviceRisk));
+        if (d.plan != null) {
+            if (d.fixedCost > 0) breakdown.add(new CostLine("Repair / cross-dock", d.fixedCost));
+            breakdown.add(new CostLine("Freight (all legs)", d.plan.freightInr()));
+            if (d.plan.handlingInr() > 0) breakdown.add(new CostLine("RDC handling / stock transfer", d.plan.handlingInr()));
+            if (d.plan.penaltyInr() > 0) breakdown.add(new CostLine("Channel service penalty", d.plan.penaltyInr()));
+        } else {
+            breakdown.add(new CostLine("Transport / execution", d.transport));
+            if (d.penaltyEV > 0) breakdown.add(new CostLine("Expected SLA penalty", d.penaltyEV));
+            if (d.stockoutEV > 0) breakdown.add(new CostLine("Stock-out exposure", d.stockoutEV));
+            if (d.spoilageEV > 0) breakdown.add(new CostLine("Spoilage / cold-chain", d.spoilageEV));
+            if (d.serviceRisk > 0) breakdown.add(new CostLine("Service-risk (miss x unreliability)", d.serviceRisk));
+        }
         if (d.co2Cost > 0) breakdown.add(new CostLine("Carbon cost", d.co2Cost));
+        String summary = d.plan != null ? d.plan.summary() : null;
         return new OptionView(d.id, d.title, d.type, d.provider, round1(d.etaMean), d.onTime,
                 (int) Math.round(d.pOnTime * 100), d.reliability, d.expectedCost, breakdown, d.co2Kg,
-                d.score, recommended, d.pros, d.cons, d.risks);
+                d.score, recommended, summary, d.pros, d.cons, d.risks, d.plan);
     }
 
     // ── 4. build the twelve specialist agent reports ──
@@ -668,6 +957,197 @@ public class AgentOrchestrator {
         return out;
     }
 
+    // ── 4b. the six distribution-side agents (only for multi-drop SKU x channel loads) ──
+
+    /** Splice the demand-side specialists in after the Fulfillment agent. */
+    private List<AgentReport> spliceDistributionAgents(List<AgentReport> base, Ctx ctx,
+                                                       List<Draft> all, Draft best) {
+        List<AgentReport> extra = buildDistributionAgents(ctx, all, best);
+        List<AgentReport> out = new ArrayList<>();
+        boolean inserted = false;
+        for (AgentReport a : base) {
+            out.add(a);
+            if (!inserted && "Fulfillment".equals(a.domain())) {
+                out.addAll(extra);
+                inserted = true;
+            }
+        }
+        if (!inserted) out.addAll(extra);
+        return out;
+    }
+
+    private List<AgentReport> buildDistributionAgents(Ctx ctx, List<Draft> all, Draft best) {
+        Shipment s = ctx.s();
+        FulfilmentPlan p = best.plan;
+        List<AgentReport> out = new ArrayList<>();
+        List<String> cities = planner.destinations(s);
+        int totalUnits = s.loadLines().stream()
+                .flatMap(l -> l.channels().values().stream()).mapToInt(Integer::intValue).sum();
+
+        // 13 · Demand & Channel Planner
+        List<Factor> demandFactors = new ArrayList<>();
+        demandFactors.add(f("UNITS", "Consignment", fmt(totalUnits) + " units / " + fmt(s.tons()) + "t across " + erp.skus().size() + " SKUs", "MODELED", "INFO"));
+        demandFactors.add(f("DROPS", "Destination cities", String.join(" + ", cities), "MODELED", "INFO"));
+        demandFactors.add(f("COVER", "What this load represents", fmt(s.coverDays()) + " days of cover per city (no buffer behind it)", "MODELED", "CRITICAL"));
+        for (SalesChannel c : erp.salesChannels()) {
+            int dem = channelDemand(s, c.code(), null);
+            if (dem == 0) continue;
+            demandFactors.add(f("CH_" + c.code(), c.name() + " demand",
+                    fmt(dem) + " units, promise " + fmt(c.maxDelayHrs()) + "h, INR " + fmt(c.penaltyPerUnitInr()) + "/unit at risk",
+                    "MODELED", c.maxDelayHrs() <= 12 ? "CRITICAL" : c.maxDelayHrs() <= 24 ? "CAUTION" : "INFO"));
+        }
+        out.add(new AgentReport("Demand & Channel Planner", "Breaks the load down by city, SKU and consumer channel", "📊", "Demand",
+                String.format("%s units for %s - and this load IS their %s-day cover, so there is no buffer behind it. The tight end is Qcommerce (%sh promise) and Ecommerce (%sh); traditional trade can wait a beat.",
+                        fmt(totalUnits), String.join(" + ", cities), fmt(s.coverDays()),
+                        fmt(channelPromise("Qc")), fmt(channelPromise("Ec"))),
+                demandFactors));
+
+        // 14 · Multi-Echelon Sourcing
+        List<Factor> srcFactors = new ArrayList<>();
+        int totalLendable = 0;
+        for (Rdc r : erp.rdcs()) {
+            Map<String, Integer> lend = planner.lendableBySku(r);
+            int sum = lend.values().stream().mapToInt(Integer::intValue).sum();
+            totalLendable += sum;
+            boolean atBreakdown = r.city().equalsIgnoreCase(s.breakdownNearCity());
+            srcFactors.add(f("RDC_" + r.city(), r.city() + " RDC (" + r.region() + ")",
+                    "can lend " + fmt(sum) + " units; own replenishment in " + fmt(r.replenishInDays()) + "d",
+                    "COMPUTED", sum > 0 ? "GOOD" : "CAUTION"));
+            if (atBreakdown) {
+                srcFactors.add(f("RDC_NEAR", "Nearest depot to the breakdown", r.city() + " - the vehicle is stranded at its gate", "MODELED", "GOOD"));
+            }
+        }
+        srcFactors.add(f("LENDABLE", "Total network spare cover", fmt(totalLendable) + " of " + fmt(totalUnits) + " units ("
+                + pct(totalLendable, totalUnits) + "% of the load)", "COMPUTED", totalLendable >= totalUnits ? "GOOD" : "CAUTION"));
+        srcFactors.add(f("POLICY", "Lending policy", "each RDC retains replenishment lead (" + fmt(erp.rdcs().isEmpty() ? 2 : erp.rdcs().get(0).replenishInDays())
+                + "d) + " + fmt(DistributionPlanner.RDC_SAFETY_DAYS) + "d safety", "MODELED", "INFO"));
+        out.add(new AgentReport("Multi-Echelon Sourcing Agent", "Finds depots that can lend without breaking their own cover", "🏬", "Sourcing-Net",
+                String.format("The two RDCs can spare %s units between them - %d%% of the load. Neither can cover this alone: each is itself %s days from replenishment, so it must retain its own cover first. %s",
+                        fmt(totalLendable), pct(totalLendable, totalUnits),
+                        fmt(erp.rdcs().isEmpty() ? 2 : erp.rdcs().get(0).replenishInDays()),
+                        totalLendable < totalUnits ? "Depot stock alone cannot recover this shipment - it must be blended with the vehicle." : "Depot stock alone can cover the load."),
+                srcFactors));
+
+        // 15 · Allocation & Fair-Share
+        List<Factor> allocFactors = new ArrayList<>();
+        if (p != null) {
+            for (ChannelFill c : p.channelTotals()) {
+                allocFactors.add(f("FILL_" + c.channel(), c.channelName() + " fill",
+                        c.fillPct() + "% (" + fmt(c.onTimeUnits()) + "/" + fmt(c.demand()) + " in " + fmt(c.promiseHrs()) + "h)",
+                        "COMPUTED", c.fillPct() >= 100 ? "GOOD" : c.fillPct() >= 60 ? "CAUTION" : "CRITICAL"));
+            }
+            allocFactors.add(f("RULE", "Allocation rule", "scarce units go to the highest avoided-penalty channel first", "MODELED", "INFO"));
+        }
+        out.add(new AgentReport("Allocation & Fair-Share Agent", "Decides which channels get the scarce units", "⚖️", "Allocation",
+                p == null ? "No allocation required."
+                        : String.format("Under \"%s\": %d%% of units land inside their channel promise. %s",
+                        best.title, p.fillPct(),
+                        p.channelTotals().stream().filter(c -> c.fillPct() >= 100).count() > 0
+                                ? "Protected: " + p.channelTotals().stream().filter(c -> c.fillPct() >= 100)
+                                .map(ChannelFill::channel).reduce((a, b) -> a + ", " + b).orElse("-") + "."
+                                : "No channel is fully protected."),
+                allocFactors));
+
+        // 16 · Replenishment & Backfill
+        List<Factor> backFactors = new ArrayList<>();
+        if (p != null) {
+            for (var bf : p.backfills()) {
+                backFactors.add(f("BF_" + bf.rdc(), bf.rdc() + " lent",
+                        fmt(bf.unitsLent()) + " units; " + fmt(bf.unitsRepaid()) + " repaid from the recovered load",
+                        "COMPUTED", bf.unitsRepaid() >= bf.unitsLent() ? "GOOD" : "CAUTION"));
+            }
+            if (p.backfills().isEmpty()) {
+                backFactors.add(f("BF_NONE", "RDC draw-down", "none - no depot stock used", "COMPUTED", "GOOD"));
+            }
+            backFactors.add(f("INBOUND", "RDC inbound replenishment",
+                    "in transit, arriving in " + fmt(erp.rdcs().isEmpty() ? 2 : erp.rdcs().get(0).replenishInDays()) + " days", "MODELED", "GOOD"));
+            backFactors.add(f("UNFILLED", "Rolls to next cycle",
+                    fmt(p.unfilledUnits()) + " units", "COMPUTED", p.unfilledUnits() > 0 ? "CAUTION" : "GOOD"));
+        }
+        out.add(new AgentReport("Replenishment & Backfill Agent", "Makes the lending depot whole again", "🔄", "Backfill",
+                p == null || p.backfills().isEmpty()
+                        ? "No depot stock drawn down - nothing to backfill."
+                        : p.backfills().stream().map(b -> b.rdc() + " lends " + fmt(b.unitsLent()) + " units. " + b.note())
+                        .reduce((a, b) -> a + " " + b).orElse(""),
+                backFactors));
+
+        // 17 · Transporter Sourcing (rate/kg master)
+        List<Transporter> pool = erp.transportersForLane(s.route());
+        List<Factor> tFactors = new ArrayList<>();
+        for (Transporter t : pool) {
+            tFactors.add(f("T_" + t.name(), t.name(),
+                    "INR " + fmt(t.ratePerKg()) + "/kg, " + fmt(t.transitHrs()) + "h lane transit, " + t.reliabilityPct() + "% reliable",
+                    "MODELED", t.reliabilityPct() >= 92 ? "GOOD" : t.reliabilityPct() < 85 ? "CAUTION" : "INFO"));
+        }
+        Transporter cheapT = pool.stream().min((a, b) -> Double.compare(a.ratePerKg(), b.ratePerKg())).orElse(null);
+        Transporter fastT = pool.stream().min((a, b) -> Double.compare(a.transitHrs(), b.transitHrs())).orElse(null);
+        out.add(new AgentReport("Transporter Sourcing Agent", "Prices the replacement-vehicle market on this lane", "🚛", "Transport",
+                pool.isEmpty() ? "No transporter master rows for this lane."
+                        : String.format("%d transporters quote this lane. Cheapest: %s at INR %s/kg. Fastest: %s at %sh. Incumbent %s is carrying the load at INR %s/kg.",
+                        pool.size(), cheapT != null ? cheapT.name() : "-", cheapT != null ? fmt(cheapT.ratePerKg()) : "-",
+                        fastT != null ? fastT.name() : "-", fastT != null ? fmt(fastT.transitHrs()) : "-",
+                        s.incumbentTransporter(), fmt(s.freightRatePerKg())),
+                tFactors));
+
+        // 18 · Stakeholder Comms
+        List<Stakeholder> holders = buildStakeholders(best);
+        List<Factor> commsFactors = new ArrayList<>();
+        long immediate = holders.stream().filter(h -> "IMMEDIATE".equals(h.urgency())).count();
+        commsFactors.add(f("DEPTS", "Departments to notify", holders.size() + " across "
+                + erp.salesChannels().size() + " channels", "MODELED", "INFO"));
+        commsFactors.add(f("NOW", "Immediate action required", immediate + " departments", "COMPUTED", immediate > 0 ? "CAUTION" : "GOOD"));
+        if (p != null) {
+            String exposed = p.channelTotals().stream().filter(c -> c.fillPct() < 100)
+                    .map(c -> c.channel() + " " + c.fillPct() + "%")
+                    .reduce((a, b) -> a + ", " + b).orElse("none");
+            commsFactors.add(f("TELL", "Channel owners to re-promise", exposed, "COMPUTED",
+                    "none".equals(exposed) ? "GOOD" : "CAUTION"));
+        }
+        out.add(new AgentReport("Stakeholder Comms Agent", "Tells every department what changed and what they must do", "📣", "Comms",
+                String.format("%d departments must be told; %d need to act immediately (supply planning to release the RDC stock, city distribution to re-sequence beats, and the channel owners to re-promise where fill is short).",
+                        holders.size(), immediate),
+                commsFactors));
+
+        return out;
+    }
+
+    /** Who has to be told, and what they have to do about it. */
+    private List<Stakeholder> buildStakeholders(Draft best) {
+        FulfilmentPlan p = best.plan;
+        boolean usesRdc = p != null && !p.backfills().isEmpty();
+        boolean shortfall = p != null && p.unfilledUnits() > 0;
+        List<Stakeholder> out = new ArrayList<>();
+        for (Department d : erp.departments()) {
+            String urgency = switch (d.scope()) {
+                case "REGIONAL" -> "IMMEDIATE";
+                case "CITY" -> "IMMEDIATE";
+                case "MOTHER" -> usesRdc ? "IMMEDIATE" : "NEXT_CYCLE";
+                case "HOD" -> shortfall ? "IMMEDIATE" : "FYI";
+                default -> shortfall ? "FYI" : "FYI";
+            };
+            out.add(new Stakeholder(d.name(), d.scope(), d.action(), urgency));
+        }
+        return out;
+    }
+
+    private int channelDemand(Shipment s, String channel, String cityOrNull) {
+        int sum = 0;
+        for (var l : s.loadLines()) {
+            if (cityOrNull != null && !l.city().equals(cityOrNull)) continue;
+            Integer v = l.channels().get(channel);
+            if (v != null) sum += v;
+        }
+        return sum;
+    }
+
+    private double channelPromise(String code) {
+        return erp.findChannel(code).map(SalesChannel::maxDelayHrs).orElse(48.0);
+    }
+
+    private static int pct(int part, int whole) {
+        return whole <= 0 ? 0 : (int) Math.round(100.0 * part / whole);
+    }
+
     // ── evidence trail + signals strip ──
 
     private List<Evidence> buildEvidence(Ctx ctx, Draft best) {
@@ -850,6 +1330,8 @@ public class AgentOrchestrator {
     private static int clampRel(int r) { return Math.max(40, Math.min(99, r)); }
 
     private static double round1(double v) { return Math.round(v * 10.0) / 10.0; }
+
+    private static double round2(double v) { return Math.round(v * 100.0) / 100.0; }
 
     private static <T> List<T> safe(List<T> l) { return l == null ? List.of() : l; }
 

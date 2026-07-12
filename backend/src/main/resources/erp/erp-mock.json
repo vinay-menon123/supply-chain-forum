@@ -1,22 +1,112 @@
 {
   "company": "Nexus Freight & Distribution (simulated ERP)",
   "cities": [
-    { "name": "Nagpur",     "lat": 21.15, "lon": 79.09 },
-    { "name": "Pune",       "lat": 18.52, "lon": 73.86 },
-    { "name": "Nashik",     "lat": 19.99, "lon": 73.79 },
-    { "name": "Mumbai",     "lat": 19.08, "lon": 72.88 },
-    { "name": "Hyderabad",  "lat": 17.39, "lon": 78.49 },
-    { "name": "Aurangabad", "lat": 19.88, "lon": 75.34 },
-    { "name": "Surat",      "lat": 21.17, "lon": 72.83 }
+    { "name": "Nagpur",      "lat": 21.15, "lon": 79.09 },
+    { "name": "Pune",        "lat": 18.52, "lon": 73.86 },
+    { "name": "Nashik",      "lat": 19.99, "lon": 73.79 },
+    { "name": "Mumbai",      "lat": 19.08, "lon": 72.88 },
+    { "name": "Hyderabad",   "lat": 17.39, "lon": 78.49 },
+    { "name": "Aurangabad",  "lat": 19.88, "lon": 75.34 },
+    { "name": "Surat",       "lat": 21.17, "lon": 72.83 },
+    { "name": "Salem",       "lat": 11.66, "lon": 78.15 },
+    { "name": "Coimbatore",  "lat": 11.02, "lon": 76.96 },
+    { "name": "Hoskote",     "lat": 13.07, "lon": 77.80 },
+    { "name": "Trichur",     "lat": 10.52, "lon": 76.21 },
+    { "name": "Chennai",     "lat": 13.08, "lon": 80.27 }
   ],
+
+  "skus": [
+    { "code": "A", "name": "Shampoo sachet 6ml",   "unitWeightKg": 0.2667, "unitValueInr": 120 },
+    { "code": "B", "name": "Detergent bar 250g",   "unitWeightKg": 0.2667, "unitValueInr": 110 },
+    { "code": "C", "name": "Biscuits 100g",        "unitWeightKg": 0.2667, "unitValueInr": 95  },
+    { "code": "D", "name": "Tea 250g",             "unitWeightKg": 0.2667, "unitValueInr": 130 },
+    { "code": "E", "name": "Soap 100g",            "unitWeightKg": 0.2667, "unitValueInr": 105 },
+    { "code": "F", "name": "Hair oil 100ml",       "unitWeightKg": 0.2667, "unitValueInr": 150 },
+    { "code": "G", "name": "Toothpaste 100g",      "unitWeightKg": 0.2667, "unitValueInr": 140 },
+    { "code": "H", "name": "Noodles 70g",          "unitWeightKg": 0.2667, "unitValueInr": 125 }
+  ],
+
+  "salesChannels": [
+    { "code": "Qc",  "name": "Qcommerce",         "priority": 1, "maxDelayHrs": 12, "penaltyPerUnitInr": 18, "note": "10-min promise; marketplace de-listing + instant substitution if unfilled" },
+    { "code": "Ec",  "name": "Ecommerce",         "priority": 2, "maxDelayHrs": 24, "penaltyPerUnitInr": 14, "note": "Marketplace SLA; ODIF penalties and buy-box loss" },
+    { "code": "MT",  "name": "Modern trade",      "priority": 3, "maxDelayHrs": 36, "penaltyPerUnitInr": 12, "note": "Contractual OTIF / fill-rate penalties; planogram gaps" },
+    { "code": "D2c", "name": "D2C",               "priority": 4, "maxDelayHrs": 48, "penaltyPerUnitInr": 6,  "note": "Direct customer comms possible; small volume" },
+    { "code": "TT",  "name": "Traditional trade", "priority": 5, "maxDelayHrs": 72, "penaltyPerUnitInr": 3,  "note": "Kirana; tolerant, can be served on the next beat cycle" }
+  ],
+
+  "departments": [
+    { "sl": 1,  "name": "Regional Demand planning",  "scope": "REGIONAL", "action": "Re-forecast the 3-day cover gap and freeze promo pull-forward" },
+    { "sl": 2,  "name": "Regional Supply planning",  "scope": "REGIONAL", "action": "Approve the RDC stock transfer and raise the backfill STO" },
+    { "sl": 3,  "name": "Regional WH operations",    "scope": "REGIONAL", "action": "Pick/pack the RDC lend quantities; stage for cross-dock" },
+    { "sl": 4,  "name": "Regional WH transportation","scope": "REGIONAL", "action": "Mobilise replacement vehicle(s) and the short-haul RDC legs" },
+    { "sl": 5,  "name": "City Operations",           "scope": "CITY",     "action": "Re-slot inbound docks for split arrivals; prep put-away" },
+    { "sl": 6,  "name": "City Distribution",         "scope": "CITY",     "action": "Re-sequence beats by channel fill; hold TT routes" },
+    { "sl": 7,  "name": "Mother WH operations",      "scope": "MOTHER",   "action": "Prepare emergency backfill for the depleted RDC" },
+    { "sl": 8,  "name": "Mother WH Demand planning", "scope": "MOTHER",   "action": "Reassess national allocation after the RDC draw-down" },
+    { "sl": 9,  "name": "Mother WH Supply planning", "scope": "MOTHER",   "action": "Pull the weekly RDC replenishment forward if cover breaches" },
+    { "sl": 10, "name": "HOD Planning",              "scope": "HOD",      "action": "Sign off the allocation trade-off across channels" },
+    { "sl": 11, "name": "HOD Distribution",          "scope": "HOD",      "action": "Own customer communication for unfilled channels" },
+    { "sl": 12, "name": "HOD Transportation",        "scope": "HOD",      "action": "Approve premium freight / expedite spend" },
+    { "sl": 13, "name": "CSO",                       "scope": "EXEC",     "action": "Escalation only if key-account fill drops below threshold" }
+  ],
+
+  "rdcs": [
+    {
+      "city": "Hoskote", "region": "KA", "replenishInDays": 2, "replenishStatus": "IN_TRANSIT",
+      "note": "Weekly replenishment, one vehicle per WH. Sits on the Hyderabad-Salem corridor.",
+      "cover": [
+        { "sku": "A", "daysOfCover": 5, "dailyDemandUnits": 1333 },
+        { "sku": "B", "daysOfCover": 5, "dailyDemandUnits": 1333 },
+        { "sku": "C", "daysOfCover": 5, "dailyDemandUnits": 2667 },
+        { "sku": "D", "daysOfCover": 5, "dailyDemandUnits": 1333 },
+        { "sku": "E", "daysOfCover": 4, "dailyDemandUnits": 1333 },
+        { "sku": "F", "daysOfCover": 4, "dailyDemandUnits": 667 },
+        { "sku": "G", "daysOfCover": 4, "dailyDemandUnits": 667 },
+        { "sku": "H", "daysOfCover": 4, "dailyDemandUnits": 667 }
+      ],
+      "legs": [
+        { "toCity": "Salem",      "distanceKm": 200, "transitHrs": 5 },
+        { "toCity": "Coimbatore", "distanceKm": 290, "transitHrs": 7 }
+      ]
+    },
+    {
+      "city": "Trichur", "region": "KL", "replenishInDays": 2, "replenishStatus": "IN_TRANSIT",
+      "note": "Weekly replenishment. Close to Coimbatore, further from Salem.",
+      "cover": [
+        { "sku": "A", "daysOfCover": 4, "dailyDemandUnits": 1333 },
+        { "sku": "B", "daysOfCover": 4, "dailyDemandUnits": 1333 },
+        { "sku": "C", "daysOfCover": 4, "dailyDemandUnits": 2667 },
+        { "sku": "D", "daysOfCover": 4, "dailyDemandUnits": 1333 },
+        { "sku": "E", "daysOfCover": 5, "dailyDemandUnits": 1333 },
+        { "sku": "F", "daysOfCover": 5, "dailyDemandUnits": 667 },
+        { "sku": "G", "daysOfCover": 5, "dailyDemandUnits": 667 },
+        { "sku": "H", "daysOfCover": 5, "dailyDemandUnits": 667 }
+      ],
+      "legs": [
+        { "toCity": "Salem",      "distanceKm": 250, "transitHrs": 6 },
+        { "toCity": "Coimbatore", "distanceKm": 130, "transitHrs": 4 }
+      ]
+    }
+  ],
+
+  "transporters": [
+    { "name": "SKV", "lane": "Hyderabad-Coimbatore", "ratePerKg": 8.0,  "transitHrs": 36, "reliabilityPct": 90, "note": "Incumbent on this load" },
+    { "name": "KVS", "lane": "Hyderabad-Coimbatore", "ratePerKg": 8.0,  "transitHrs": 45, "reliabilityPct": 87, "note": "Same rate, slower" },
+    { "name": "NMR", "lane": "Hyderabad-Coimbatore", "ratePerKg": 9.0,  "transitHrs": 36, "reliabilityPct": 92, "note": "Premium rate, fast" },
+    { "name": "ABS", "lane": "Hyderabad-Coimbatore", "ratePerKg": 7.5,  "transitHrs": 50, "reliabilityPct": 83, "note": "Cheapest, slowest" },
+    { "name": "HKG", "lane": "Hyderabad-Coimbatore", "ratePerKg": 10.0, "transitHrs": 40, "reliabilityPct": 94, "note": "Dearest, most reliable" }
+  ],
+
   "vehicles": [
     { "id": "VH-07", "plate": "MH-04-DK-3097", "type": "32ft Multi-Axle", "capacityTons": 18, "currentCity": "Nagpur",     "status": "BREAKDOWN", "driver": "R. Pawar",    "driverHosLeftHrs": 3.0, "fuelPct": 55, "ageYears": 6, "failureRatePct": 14, "reefer": false, "note": "Gearbox failure on NH-44 near Nagpur" },
     { "id": "VH-03", "plate": "MH-20-AB-1121", "type": "20ft Container",  "capacityTons": 10, "currentCity": "Aurangabad", "status": "IDLE",      "driver": "S. Khan",     "driverHosLeftHrs": 9.0, "fuelPct": 88, "ageYears": 3, "failureRatePct": 6,  "reefer": false, "note": "Available, last trip closed" },
     { "id": "VH-11", "plate": "MH-12-CE-5540", "type": "32ft Multi-Axle", "capacityTons": 18, "currentCity": "Pune",       "status": "EN_ROUTE",  "driver": "A. Deshmukh", "driverHosLeftHrs": 4.5, "fuelPct": 40, "ageYears": 4, "failureRatePct": 8,  "reefer": false, "note": "On Pune-Mumbai run" },
     { "id": "VH-05", "plate": "TS-09-UB-7781", "type": "24ft Reefer",     "capacityTons": 14, "currentCity": "Hyderabad",  "status": "IDLE",      "driver": "K. Reddy",    "driverHosLeftHrs": 10.0,"fuelPct": 92, "ageYears": 2, "failureRatePct": 4,  "reefer": true,  "note": "Available, reefer-capable" },
     { "id": "VH-09", "plate": "MH-14-GH-2210", "type": "32ft Multi-Axle", "capacityTons": 18, "currentCity": "Nashik",     "status": "BREAKDOWN", "driver": "P. Jadhav",   "driverHosLeftHrs": 1.5, "fuelPct": 30, "ageYears": 7, "failureRatePct": 17, "reefer": false, "note": "Tyre burst + axle damage on NH-160" },
-    { "id": "VH-02", "plate": "MH-01-XY-9032", "type": "20ft Container",  "capacityTons": 10, "currentCity": "Mumbai",     "status": "EN_ROUTE",  "driver": "F. Sheikh",   "driverHosLeftHrs": 6.0, "fuelPct": 62, "ageYears": 5, "failureRatePct": 9,  "reefer": false, "note": "On Mumbai-Surat run" }
+    { "id": "VH-02", "plate": "MH-01-XY-9032", "type": "20ft Container",  "capacityTons": 10, "currentCity": "Mumbai",     "status": "EN_ROUTE",  "driver": "F. Sheikh",   "driverHosLeftHrs": 6.0, "fuelPct": 62, "ageYears": 5, "failureRatePct": 9,  "reefer": false, "note": "On Mumbai-Surat run" },
+    { "id": "VH-21", "plate": "TS-07-KL-4410", "type": "32ft Multi-Axle", "capacityTons": 18, "currentCity": "Hoskote",    "status": "BREAKDOWN", "driver": "M. Nair",     "driverHosLeftHrs": 2.0, "fuelPct": 48, "ageYears": 6, "failureRatePct": 13, "reefer": false, "note": "Engine overheating - stranded on NH-75 near Hoskote" }
   ],
+
   "carriers": [
     { "id": "C1", "name": "BlueDart Surface",       "costPerKm": 42, "reliabilityPct": 94, "avgResponseHrs": 3, "claimsRatePct": 1.2, "spot": false, "compliant": true,  "lanes": ["Nagpur-Pune", "Mumbai-Pune", "Nashik-Mumbai"], "note": "Premium, GPS-tracked, strong SLA record" },
     { "id": "C2", "name": "VRL Roadlines",          "costPerKm": 31, "reliabilityPct": 88, "avgResponseHrs": 5, "claimsRatePct": 2.6, "spot": false, "compliant": true,  "lanes": ["Nagpur-Pune", "Nagpur-Mumbai", "Nashik-Mumbai"], "note": "Good pan-India network, mid response time" },
@@ -24,32 +114,43 @@
     { "id": "C4", "name": "TCI Freight",            "costPerKm": 38, "reliabilityPct": 91, "avgResponseHrs": 4, "claimsRatePct": 1.8, "spot": false, "compliant": true,  "lanes": ["Nashik-Mumbai", "Mumbai-Pune", "Hyderabad-Pune"], "note": "Reliable, wide coverage, reefer-capable" },
     { "id": "C5", "name": "Gati Express",           "costPerKm": 35, "reliabilityPct": 86, "avgResponseHrs": 4, "claimsRatePct": 3.0, "spot": true,  "compliant": true,  "lanes": ["Hyderabad-Pune", "Nagpur-Mumbai"], "note": "Balanced cost and reliability" }
   ],
+
   "depots": [
     { "city": "Nagpur",     "note": "Regional hub - no idle unit right now" },
     { "city": "Aurangabad", "note": "Idle unit VH-03 stationed here" },
     { "city": "Pune",       "note": "Primary DC" },
-    { "city": "Hyderabad",  "note": "Southern hub - idle unit VH-05" }
+    { "city": "Hyderabad",  "note": "Southern regional WH - idle unit VH-05" }
   ],
+
   "lanes": [
-    { "route": "Nagpur-Pune",    "distanceKm": 700, "tollInr": 1450, "ghatSection": true,  "checkposts": 1, "hasRail": true,  "hasAir": true,  "altRouteKm": 745, "railTerminalHrs": 6, "airCutoffHrs": 4 },
-    { "route": "Nashik-Mumbai",  "distanceKm": 170, "tollInr": 480,  "ghatSection": true,  "checkposts": 0, "hasRail": true,  "hasAir": false, "altRouteKm": 210, "railTerminalHrs": 5, "airCutoffHrs": 0 },
-    { "route": "Hyderabad-Pune", "distanceKm": 560, "tollInr": 1320, "ghatSection": false, "checkposts": 1, "hasRail": true,  "hasAir": true,  "altRouteKm": 590, "railTerminalHrs": 6, "airCutoffHrs": 4 }
+    { "route": "Nagpur-Pune",           "distanceKm": 700, "tollInr": 1450, "ghatSection": true,  "checkposts": 1, "hasRail": true,  "hasAir": true,  "altRouteKm": 745, "railTerminalHrs": 6, "airCutoffHrs": 4 },
+    { "route": "Nashik-Mumbai",         "distanceKm": 170, "tollInr": 480,  "ghatSection": true,  "checkposts": 0, "hasRail": true,  "hasAir": false, "altRouteKm": 210, "railTerminalHrs": 5, "airCutoffHrs": 0 },
+    { "route": "Hyderabad-Pune",        "distanceKm": 560, "tollInr": 1320, "ghatSection": false, "checkposts": 1, "hasRail": true,  "hasAir": true,  "altRouteKm": 590, "railTerminalHrs": 6, "airCutoffHrs": 4 },
+    { "route": "Hyderabad-Coimbatore",  "distanceKm": 800, "tollInr": 2100, "ghatSection": true,  "checkposts": 2, "hasRail": true,  "hasAir": true,  "altRouteKm": 860, "railTerminalHrs": 7, "airCutoffHrs": 5 }
   ],
+
   "servicePoints": [
-    { "city": "Nagpur", "heavyRepair": true,  "note": "OEM service point on NH-44" },
-    { "city": "Nashik", "heavyRepair": false, "note": "Tyre + light repair only" },
-    { "city": "Pune",   "heavyRepair": true,  "note": "Full workshop at DC" }
+    { "city": "Nagpur",  "heavyRepair": true,  "note": "OEM service point on NH-44" },
+    { "city": "Nashik",  "heavyRepair": false, "note": "Tyre + light repair only" },
+    { "city": "Pune",    "heavyRepair": true,  "note": "Full workshop at DC" },
+    { "city": "Hoskote", "heavyRepair": true,  "note": "OEM workshop on NH-75 (Bengaluru belt)" }
   ],
+
   "distributionCentres": [
-    { "city": "Pune",   "onHandUnits": 4200, "dailyDemandUnits": 2000, "altSourceCity": "Mumbai", "altSourceLeadHrs": 10 },
-    { "city": "Mumbai", "onHandUnits": 300,  "dailyDemandUnits": 1500, "altSourceCity": "Pune",   "altSourceLeadHrs": 8  }
+    { "city": "Pune",       "onHandUnits": 4200, "dailyDemandUnits": 2000,  "altSourceCity": "Mumbai", "altSourceLeadHrs": 10 },
+    { "city": "Mumbai",     "onHandUnits": 300,  "dailyDemandUnits": 1500,  "altSourceCity": "Pune",   "altSourceLeadHrs": 8  },
+    { "city": "Salem",      "onHandUnits": 0,    "dailyDemandUnits": 10000, "altSourceCity": "Hoskote","altSourceLeadHrs": 5  },
+    { "city": "Coimbatore", "onHandUnits": 0,    "dailyDemandUnits": 10000, "altSourceCity": "Trichur","altSourceLeadHrs": 4  }
   ],
+
   "advisories": [
-    { "area": "Pune city entry",         "route": "Nagpur-Pune",    "type": "FESTIVAL", "severity": "MODERATE", "delayHrs": 4, "message": "Ganesh festival congestion near Pune city entry; heavy traffic expected" },
-    { "area": "NH-44 Nagpur belt",       "route": "Nagpur-Pune",    "type": "WEATHER",  "severity": "LOW",      "delayHrs": 1, "message": "Light rain forecast along NH-44; minor slowdown" },
-    { "area": "Mumbai-Nashik corridor",  "route": "Nashik-Mumbai",  "type": "BLOCKAGE", "severity": "HIGH",     "delayHrs": 6, "message": "Kasara Ghat landslide clearing; single-lane movement, long queues" },
-    { "area": "Hyderabad ORR",           "route": "Hyderabad-Pune", "type": "WEATHER",  "severity": "LOW",      "delayHrs": 1, "message": "Isolated showers near Hyderabad outer ring; negligible impact" }
+    { "area": "Pune city entry",        "route": "Nagpur-Pune",          "type": "FESTIVAL", "severity": "MODERATE", "delayHrs": 4, "message": "Ganesh festival congestion near Pune city entry; heavy traffic expected" },
+    { "area": "NH-44 Nagpur belt",      "route": "Nagpur-Pune",          "type": "WEATHER",  "severity": "LOW",      "delayHrs": 1, "message": "Light rain forecast along NH-44; minor slowdown" },
+    { "area": "Mumbai-Nashik corridor", "route": "Nashik-Mumbai",        "type": "BLOCKAGE", "severity": "HIGH",     "delayHrs": 6, "message": "Kasara Ghat landslide clearing; single-lane movement, long queues" },
+    { "area": "Hyderabad ORR",          "route": "Hyderabad-Pune",       "type": "WEATHER",  "severity": "LOW",      "delayHrs": 1, "message": "Isolated showers near Hyderabad outer ring; negligible impact" },
+    { "area": "Krishnagiri ghat",       "route": "Hyderabad-Coimbatore", "type": "WEATHER",  "severity": "LOW",      "delayHrs": 1, "message": "Wet ghat section near Krishnagiri; reduced speeds" }
   ],
+
   "shipments": [
     {
       "id": "SHP-1042", "ref": "PO-88231", "cargo": "FMCG - packaged foods", "tons": 18,
@@ -83,6 +184,41 @@
       "customerTier": "HOSPITAL_CHAIN", "penaltyPerHourInr": 4200, "penaltyCapInr": 140000,
       "perishable": true, "tempControlled": true, "shelfLifeHrs": 30, "hazmat": false,
       "eWayBillIssuedHoursAgo": 12, "skuCriticality": "A"
+    },
+    {
+      "id": "SHP-7001", "ref": "PO-77410", "cargo": "FMCG - 8 SKUs (multi-drop)", "tons": 16,
+      "origin": "Hyderabad", "destination": "Coimbatore", "route": "Hyderabad-Coimbatore",
+      "remainingKm": 290, "slaHoursRemaining": 20, "value": 6900000, "priority": "HIGH",
+      "vehicleId": "VH-21", "breakdownIssue": "Engine overheating - stranded on NH-75 near Hoskote",
+      "nearbySpare": null,
+      "candidateCarrierIds": [],
+      "customerTier": "KEY_ACCOUNT", "penaltyPerHourInr": 6000, "penaltyCapInr": 250000,
+      "perishable": false, "tempControlled": false, "shelfLifeHrs": 0, "hazmat": false,
+      "eWayBillIssuedHoursAgo": 26, "skuCriticality": "A",
+
+      "breakdownNearCity": "Hoskote",
+      "incumbentTransporter": "SKV",
+      "freightRatePerKg": 8.0,
+      "coverDays": 3,
+      "destinationCities": ["Salem", "Coimbatore"],
+      "loadLines": [
+        { "sku": "A", "city": "Salem",      "channels": { "MT": 1000, "TT": 1200, "Ec": 800,  "Qc": 800,  "D2c": 200 } },
+        { "sku": "B", "city": "Salem",      "channels": { "MT": 1000, "TT": 1200, "Ec": 800,  "Qc": 800,  "D2c": 200 } },
+        { "sku": "C", "city": "Salem",      "channels": { "MT": 2000, "TT": 2400, "Ec": 1600, "Qc": 1600, "D2c": 400 } },
+        { "sku": "D", "city": "Salem",      "channels": { "MT": 1000, "TT": 1200, "Ec": 800,  "Qc": 800,  "D2c": 200 } },
+        { "sku": "E", "city": "Salem",      "channels": { "MT": 1000, "TT": 1200, "Ec": 800,  "Qc": 800,  "D2c": 200 } },
+        { "sku": "F", "city": "Salem",      "channels": { "MT": 500,  "TT": 600,  "Ec": 400,  "Qc": 400,  "D2c": 100 } },
+        { "sku": "G", "city": "Salem",      "channels": { "MT": 500,  "TT": 600,  "Ec": 400,  "Qc": 400,  "D2c": 100 } },
+        { "sku": "H", "city": "Salem",      "channels": { "MT": 500,  "TT": 600,  "Ec": 400,  "Qc": 400,  "D2c": 100 } },
+        { "sku": "A", "city": "Coimbatore", "channels": { "MT": 1200, "TT": 1000, "Ec": 600,  "Qc": 1000, "D2c": 200 } },
+        { "sku": "B", "city": "Coimbatore", "channels": { "MT": 1200, "TT": 1000, "Ec": 600,  "Qc": 1000, "D2c": 200 } },
+        { "sku": "C", "city": "Coimbatore", "channels": { "MT": 2400, "TT": 2000, "Ec": 1200, "Qc": 2000, "D2c": 400 } },
+        { "sku": "D", "city": "Coimbatore", "channels": { "MT": 1200, "TT": 1000, "Ec": 600,  "Qc": 1000, "D2c": 200 } },
+        { "sku": "E", "city": "Coimbatore", "channels": { "MT": 1200, "TT": 1000, "Ec": 600,  "Qc": 1000, "D2c": 200 } },
+        { "sku": "F", "city": "Coimbatore", "channels": { "MT": 600,  "TT": 500,  "Ec": 300,  "Qc": 500,  "D2c": 100 } },
+        { "sku": "G", "city": "Coimbatore", "channels": { "MT": 600,  "TT": 500,  "Ec": 300,  "Qc": 500,  "D2c": 100 } },
+        { "sku": "H", "city": "Coimbatore", "channels": { "MT": 600,  "TT": 500,  "Ec": 300,  "Qc": 500,  "D2c": 100 } }
+      ]
     }
   ]
 }

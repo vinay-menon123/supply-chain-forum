@@ -148,11 +148,41 @@ original Node/Express/Prisma backend, which now lives only in git history.)
     **Gemini** `gemini-2.5-flash` via `GEMINI_API_KEY` (thinking disabled, `responseMimeType=application/json`),
     else templated. Now narrates only the recommendation rationale + 3 agent headlines (Cargo/Conditions/Risk)
     — small payload, robust — folded onto the deterministic reports. `aiPowered`/`aiProvider` expose the mode.
+  - **Demand side / distribution planning (added 2026-07-12, from the owner's `use case- vehicle breakdown.xlsx`).**
+    The tower was truck-centric; a real distributor also has to answer *which consumer channels still get served*.
+    A shipment now optionally carries `loadLines` (**SKU × destination city × sales channel** units), and when it
+    does (`Shipment.hasDistributionPlan()`) the run switches to the distribution branch: **18 agents, 158 factors**.
+    - New ERP master data: `skus`, `salesChannels` (**Qc/Ec/MT/D2c/TT** with `priority`, `maxDelayHrs` promise
+      window, `penaltyPerUnitInr`), `departments` (13, for comms), `rdcs` (regional DCs with **per-SKU
+      `daysOfCover` + `dailyDemandUnits`**, `replenishInDays`, outbound `legs`), `transporters` (rate/kg + transit).
+    - `service/agents/DistributionPlanner` — the demand brain. **Key insight it encodes: a stranded consignment is
+      not lost stock, it is *late* stock.** So: (1) **lendable** per RDC = `(daysOfCover − replenishInDays −
+      RDC_SAFETY_DAYS) × dailyDemandUnits` (a depot must keep its own cover until its inbound lands); (2) allocate
+      scarce units **greedily by avoided penalty** (Qcommerce 12h promise first … traditional trade 72h last),
+      routing each line to the **fastest source that has that SKU**; (3) price it (short-haul freight + per-unit
+      channel penalty + handling); (4) compute the **backfill** the lending RDC is owed.
+    - New strategies for these loads: repair & complete, cross-dock to a **replacement transporter** (best of the
+      master), **nearest RDC only**, **pool all RDCs**, and **HYBRID** (RDCs serve urgent channels now, the
+      recovered load follows and repays the depots).
+    - 6 new agents spliced in after Fulfillment: **Demand & Channel Planner, Multi-Echelon Sourcing, Allocation &
+      Fair-Share, Replenishment & Backfill, Transporter Sourcing, Stakeholder Comms**. Each option carries a written
+      `summary` + a `FulfilmentPlan` (per-city/per-channel/per-SKU fill matrix, sources, backfills); the run carries
+      a `stakeholders[]` list (13 depts × urgency).
+    - **Verified against the Excel case** (`SHP-7001`, Hyderabad→Salem+Coimbatore, 60,000 units, breakdown *at the
+      Hoskote RDC gate*): RDC pool alone = **exactly 50% fill** (Qc 100%, Ec 100%, MT 36%, TT/D2c 0%); truck alone
+      (repair *or* replacement) = **Qc 0%** — it cannot make the 12h Qcommerce promise, costing ₹243k in penalties;
+      **HYBRID wins at 100% fill, zero penalty, ₹89,882** vs ₹235k–₹311k, and the backfill balances exactly
+      (Hoskote lends 16,666 + Trichur 13,334 = 30,000, fully repaid from the truck's surplus).
+    - **Tunable modelling assumptions** (the Excel doesn't specify them; both live in the dataset, not the code):
+      RDC `dailyDemandUnits` (derived: the load = 3 days of cover ⇒ daily = units/3) and the **channel priority /
+      penalty-per-unit** ranking (Qc > Ec > MT > D2c > TT). Change these to change the allocation.
   - Endpoints: `GET /api/agents/erp` (+aiEnabled/aiProvider), `POST /api/agents/run {shipmentId, disruption?}`
-    → `AgentRun {scenario, signals[], agents[12], options[≤4], recommendation{…,evidence[]}, factorsConsidered,
-    aiPowered, aiProvider}`. Auth-gated (run needs an active user). Frontend `pages/Agents.tsx`: intake box +
-    shipment picker, live-signal strip, progressive 12-agent trace with per-factor chips (impact colour +
-    source tag), option cards with expandable **cost breakdown** + on-time%/reliability/CO2, evidence trail.
+    → `AgentRun {scenario, signals[], agents[12|18], options[≤4], recommendation{…,evidence[]}, stakeholders[],
+    factorsConsidered, aiPowered, aiProvider}`. Auth-gated (run needs an active user). Frontend `pages/Agents.tsx`:
+    intake box + shipment picker, live-signal strip, progressive agent trace with per-factor chips (impact colour +
+    source tag), option cards with expandable **cost breakdown** + **channel-fill chips** + written summary,
+    evidence trail, and for distribution loads a **fulfilment plan** (sources / per-city channel matrix / per-SKU
+    split / backfill) plus a **"Notify the network"** stakeholder panel.
     Still **no DB** — pure computation over the adapter + live HTTP, verifiable without Postgres. Decision-support only.
 - **Templates & resources library (`/templates`):** `Template` table + `TemplateController`
   (`/api/templates` list+filter, multipart upload, `POST /{id}/download` records+returns the file,
@@ -224,9 +254,11 @@ backend/
                MailService (Resend HTTP API preferred + JavaMail SMTP fallback, no-op until configured), DigestService (@Scheduled + manual test),
                NotificationService (@Async new-question/DM emails), InAppNotifier (in-app 🔔: answers/replies/accepts/mentions), SeedService (idempotent starter content),
                UploadStorage (interface: saveImage + saveFile) + LocalUploadStorage (default, ./uploads) + AzureBlobUploadStorage (env-gated object storage),
-               erp/ErpPort (SAP-swap interface) + erp/SimulatedErpAdapter (loads enriched resources/erp/erp-mock.json),
+               erp/ErpPort (SAP-swap interface; + skus/salesChannels/departments/rdcs/transporters/loadLines) + erp/SimulatedErpAdapter,
                agents/ExternalSignals (LIVE Open-Meteo weather + festival calendar + computed e-way-bill clock, fail-safe),
-               AgentAiClient (Anthropic|Gemini completion, fallback), AgentOrchestrator (12-agent risk-adjusted expected-landed-cost engine)
+               agents/DistributionPlanner (demand side: RDC lendable capacity, penalty-greedy channel allocation, fill matrix, backfill),
+               AgentAiClient (Anthropic|Gemini completion, fallback),
+               AgentOrchestrator (12-agent risk-adjusted expected-landed-cost engine; 18 agents + fulfilment plan when the load has SKU x channel lines)
     web/       AuthController (google/profile/me — profile now takes topics/linkedin/headline/bio + runs verify),
                QuestionController (create/comment/accept fire in-app notifications + mentions), UserController, LeaderboardController, MessageController,
                NotificationController (/api/notifications), JobController (/api/jobs), TemplateController (/api/templates),
