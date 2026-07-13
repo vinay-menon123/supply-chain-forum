@@ -13,6 +13,7 @@ import type {
   FactorImpact,
   FactorSource,
   FulfilmentPlan,
+  ImpactSummary,
   SignalView,
   Stakeholder,
 } from "../types";
@@ -537,6 +538,107 @@ function StakeholderPanel({ stakeholders }: { stakeholders: Stakeholder[] }) {
   );
 }
 
+/**
+ * The business case, in numbers. Deliberately NOT a chart: the headline comparison is
+ * ~1000:1 (hours vs seconds), which no bar can render honestly — so it leads with hero
+ * numbers and backs them with an itemised, arguable baseline.
+ */
+function ImpactScorecard({ impact }: { impact: ImpactSummary }) {
+  const hrs = (m: number) => (m / 60).toFixed(1);
+  const towerLabel =
+    impact.runtimeMs < 1000 ? `${impact.runtimeMs} ms` : `${(impact.runtimeMs / 1000).toFixed(1)} s`;
+
+  return (
+    <div className="space-y-4">
+      {/* Hero: the three numbers a CxO actually wants */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-4">
+          <p className="text-[11px] uppercase tracking-wider text-emerald-300/80">Time saved</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums text-emerald-300">{impact.hoursSaved} hrs</p>
+          <p className="mt-0.5 text-[11px] text-[#8A8F98]">per disruption event</p>
+        </div>
+        <div className="rounded-2xl border border-accent/30 bg-accent/[0.06] p-4">
+          <p className="text-[11px] uppercase tracking-wider text-accent/80">Cost avoided</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums text-accent">{fmtInr(impact.costAvoidedInr)}</p>
+          <p className="mt-0.5 truncate text-[11px] text-[#8A8F98]" title={impact.baselineTitle}>
+            vs “{impact.baselineTitle}”
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-[11px] uppercase tracking-wider text-[#8A8F98]">Decision time</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums text-white">{towerLabel}</p>
+          <p className="mt-0.5 text-[11px] text-[#8A8F98]">
+            vs {hrs(impact.manualMinutes)} hrs by hand
+          </p>
+        </div>
+      </div>
+
+      {/* Narrative */}
+      <div className="card">
+        <p className="text-[12px] leading-relaxed text-white/85">{impact.narrative}</p>
+      </div>
+
+      {/* KPI tiles — the scale of analysis performed */}
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#8A8F98]">
+          What the run actually did
+        </p>
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+          {impact.headline.map((s, i) => (
+            <div key={i} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+              <p className="text-[10px] uppercase tracking-wider text-[#5A6270]">{s.label}</p>
+              <p className="mt-0.5 text-lg font-bold tabular-nums text-white">{s.value}</p>
+              <p className="mt-0.5 text-[10px] leading-snug text-[#8A8F98]">{s.detail}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* The baseline, itemised so it can be argued with */}
+      <div className="card !p-0 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] px-4 py-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#8A8F98]">
+            The manual equivalent — what a human would have had to do
+          </p>
+          <span className="badge border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-300">
+            {hrs(impact.manualMinutes)} hrs total
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] text-[11px]">
+            <tbody>
+              {impact.manualBaseline.map((t, i) => (
+                <tr key={i} className="border-b border-white/[0.03] last:border-0">
+                  <td className="px-4 py-2 text-[#8A8F98]">{t.task}</td>
+                  <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-white/80">
+                    {t.minutes} min
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-t border-white/[0.08] bg-white/[0.02]">
+                <td className="px-4 py-2 font-semibold text-white/90">Total manual effort</td>
+                <td className="whitespace-nowrap px-4 py-2 text-right font-semibold tabular-nums text-amber-300">
+                  {impact.manualMinutes} min · {hrs(impact.manualMinutes)} hrs
+                </td>
+              </tr>
+              <tr className="bg-emerald-500/[0.05]">
+                <td className="px-4 py-2 font-semibold text-white/90">This tower</td>
+                <td className="whitespace-nowrap px-4 py-2 text-right font-semibold tabular-nums text-emerald-300">
+                  {towerLabel}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="border-t border-white/[0.06] px-4 py-2 text-[10px] leading-snug text-[#5A6270]">
+          Task durations are estimates of analyst effort by phone and spreadsheet; every other figure on this
+          page is computed from the run itself. Change the estimates and the total moves — that is deliberate.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /** The analyst's audit: how the engine actually got to its answer. */
 function DecisionRationale({ brief }: { brief: DecisionBrief }) {
   const Block = ({
@@ -967,6 +1069,19 @@ export default function Agents() {
                             and what would change the answer.
                           </p>
                           <DecisionRationale brief={run.brief} />
+                        </div>
+                      )}
+
+                      {/* Impact — the business case */}
+                      {run.impact && (
+                        <div className="mt-10">
+                          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-[#8A8F98]">
+                            {run.stakeholders.length > 0 ? "7" : "5"}. Impact — what this achieved
+                          </h2>
+                          <p className="meta mb-4 text-[11px]">
+                            The scale of analysis performed, and what it replaces.
+                          </p>
+                          <ImpactScorecard impact={run.impact} />
                         </div>
                       )}
 

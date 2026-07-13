@@ -187,9 +187,26 @@ original Node/Express/Prisma backend, which now lives only in git history.)
     materiality floor (`max(1000, 2% of best cost)`) — an early version proudly reported a ₹35 penalty gap as
     "decisive" when the real driver was a ₹7,840 execution-cost gap. Rendered as a **"Decision rationale"** section
     at the bottom of `/agents`.
+  - **Impact scorecard (`AgentRun.impact`, added 2026-07-14).** The business case, for showing the use case to a
+    large supply-chain company. Deterministic `ImpactSummary`: `headline[]` KPI tiles (agents, factors, options,
+    data points read, demand lines allocated, units re-planned, channels protected, departments coordinated),
+    a **measured** `runtimeMs` (timed with `System.nanoTime()` around the run), `costAvoidedInr` +
+    `penaltyAvoidedInr` **vs a `baselineTitle`** — the move a human would default to (the REPAIR option if the
+    vehicle broke down, i.e. the truck-first instinct; else the cheapest-rate carrier, i.e. the "just book the
+    cheapest" instinct) — and a `narrative`. Crucially the time-saved claim is **itemised, not asserted**:
+    `manualBaseline[]` is a list of `ManualTask{task, minutes}` costed from real counts (carrier calls x 8 min,
+    depot stock calls x 15, days→units reconciliation x 2/SKU/depot, **hand-allocating each SKU×city×channel
+    demand line x 1 min**, option costing x 12, department briefings x 4, …), so the total can be argued with.
+    Measured: **SHP-7001 → 18 agents, 158 factors, 80 demand lines, 159 data points, ~1s vs 5.5h manual
+    (329 min), ₹220,816 net saving, ₹243,000 penalty wiped**; SHP-1042 → 12 agents, ~0.3s vs 2.2h, ₹37,936.
+    Rendered as an **"Impact — what this achieved"** section (hero numbers + KPI tiles + the itemised baseline
+    table). Deliberately **not a chart** — the headline comparison is ~1000:1 (hours vs seconds) and no bar can
+    render that honestly. NOTE: don't say the penalty avoided is a *subset* of the cost avoided — the tower
+    spends *more* on depot freight, so `penaltyAvoided (₹243k) > costAvoided (₹220.8k)`; an early narrative said
+    "of which", which was flatly wrong.
   - Endpoints: `GET /api/agents/erp` (+aiEnabled/aiProvider), `POST /api/agents/run {shipmentId, disruption?}`
     → `AgentRun {scenario, signals[], agents[12|18], options[≤4], recommendation{…,evidence[]}, stakeholders[],
-    brief{…}, factorsConsidered, aiPowered, aiProvider}`. Auth-gated (run needs an active user). Frontend `pages/Agents.tsx`:
+    brief{…}, impact{…}, factorsConsidered, aiPowered, aiProvider}`. Auth-gated (run needs an active user). Frontend `pages/Agents.tsx`:
     intake box + shipment picker, live-signal strip, progressive agent trace with per-factor chips (impact colour +
     source tag), option cards with expandable **cost breakdown** + **channel-fill chips** + written summary,
     evidence trail, and for distribution loads a **fulfilment plan** (sources / per-city channel matrix / per-SKU

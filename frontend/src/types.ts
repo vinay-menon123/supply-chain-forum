@@ -301,6 +301,41 @@ export interface DecisionBrief {
   bottomLine: string;
 }
 
+// ── impact: what the run achieved, and what it replaced ──
+export interface ImpactStat {
+  label: string;
+  value: string;
+  detail: string;
+}
+export interface ManualTask {
+  task: string;
+  minutes: number;
+}
+export interface ImpactSummary {
+  agentsRun: number;
+  factorsConsidered: number;
+  optionsEvaluated: number;
+  dataPointsAnalysed: number;
+  demandLinesAllocated: number;
+  skusPlanned: number;
+  channelsPlanned: number;
+  citiesServed: number;
+  depotsQueried: number;
+  departmentsCoordinated: number;
+  unitsPlanned: number;
+  unitsProtected: number;
+  runtimeMs: number;
+  manualMinutes: number;
+  hoursSaved: number;
+  baselineTitle: string;
+  baselineCost: number;
+  costAvoidedInr: number;
+  penaltyAvoidedInr: number;
+  headline: ImpactStat[];
+  manualBaseline: ManualTask[];
+  narrative: string;
+}
+
 export interface AgentRun {
   scenario: AgentScenario;
   signals: SignalView[];
@@ -309,6 +344,7 @@ export interface AgentRun {
   recommendation: { optionId: string; title: string; rationale: string; evidence: Evidence[] };
   stakeholders: Stakeholder[];
   brief: DecisionBrief;
+  impact: ImpactSummary;
   factorsConsidered: number;
   aiPowered: boolean;
   aiProvider: string;

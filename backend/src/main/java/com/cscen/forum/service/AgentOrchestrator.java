@@ -122,6 +122,22 @@ public class AgentOrchestrator {
                                List<String> notConsidered, List<String> whatWouldChangeIt,
                                String bottomLine) {}
 
+    // ── impact: what this run actually achieved, in numbers a CxO can use ──
+
+    public record ImpactStat(String label, String value, String detail) {}
+
+    /** One line of the manual-effort baseline, so the time-saved claim is auditable. */
+    public record ManualTask(String task, int minutes) {}
+
+    public record ImpactSummary(int agentsRun, int factorsConsidered, int optionsEvaluated,
+                                int dataPointsAnalysed, int demandLinesAllocated, int skusPlanned,
+                                int channelsPlanned, int citiesServed, int depotsQueried,
+                                int departmentsCoordinated, int unitsPlanned, int unitsProtected,
+                                long runtimeMs, int manualMinutes, double hoursSaved,
+                                String baselineTitle, long baselineCost, long costAvoidedInr,
+                                long penaltyAvoidedInr, List<ImpactStat> headline,
+                                List<ManualTask> manualBaseline, String narrative) {}
+
     public record SignalView(String kind, String label, String detail, String source, String impact) {}
 
     public record ScenarioView(String shipmentId, String ref, String cargo, double tons, String route,
@@ -135,8 +151,8 @@ public class AgentOrchestrator {
 
     public record AgentRun(ScenarioView scenario, List<SignalView> signals, List<AgentReport> agents,
                            List<OptionView> options, Recommendation recommendation,
-                           List<Stakeholder> stakeholders, DecisionBrief brief, int factorsConsidered,
-                           boolean aiPowered, String aiProvider) {}
+                           List<Stakeholder> stakeholders, DecisionBrief brief, ImpactSummary impact,
+                           int factorsConsidered, boolean aiPowered, String aiProvider) {}
 
     public boolean isAiEnabled() { return ai.isEnabled(); }
 
@@ -174,6 +190,7 @@ public class AgentOrchestrator {
     // ── main entry ──
 
     public AgentRun run(String shipmentId, String disruptionInput) {
+        long startedAt = System.nanoTime();
         Shipment s = erp.findShipment(shipmentId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown shipment " + shipmentId));
 
@@ -214,8 +231,11 @@ public class AgentOrchestrator {
 
         DecisionBrief brief = buildDecisionBrief(ctx, drafts, top, best, distribution);
 
+        long runtimeMs = Math.max(1, (System.nanoTime() - startedAt) / 1_000_000);
+        ImpactSummary impact = buildImpact(ctx, drafts, best, agents.size(), distribution, runtimeMs);
+
         Recommendation rec = new Recommendation(best.id, best.title, rationale, evidence);
-        return new AgentRun(scenario, sig, agents, options, rec, stakeholders, brief,
+        return new AgentRun(scenario, sig, agents, options, rec, stakeholders, brief, impact,
                 distribution ? FACTOR_CATALOG_SIZE_DISTRIBUTION : FACTOR_CATALOG_SIZE,
                 aiPowered, aiProvider());
     }
@@ -1439,6 +1459,159 @@ public class AgentOrchestrator {
 
         return new DecisionBrief(situation, binding, steps, head, decisive, assumptions,
                 notConsidered, sensitivity, bottomLine);
+    }
+
+    // ── 4d. impact: what the run achieved, and what it replaced ──
+
+    // Minutes a human control-tower analyst spends on each task, doing this by phone + Excel.
+    private static final int MIN_PER_CARRIER_CALL = 8;    // availability + rate + ETA
+    private static final int MIN_PER_DEPOT_CALL = 15;     // stock report out of the depot
+    private static final int MIN_PER_SKU_DEPOT_RECONCILE = 2; // days-of-cover -> allocatable units
+    private static final int MIN_PER_DEMAND_LINE = 1;     // hand-allocating one SKU x city x channel line
+    private static final int MIN_PER_OPTION_COSTING = 12; // building a landed cost for one option
+    private static final int MIN_EXTERNAL_CHECKS = 15;    // weather, e-way bill, road advisories
+    private static final int MIN_PER_DEPARTMENT_CALL = 4; // telling one department what changed
+    private static final int MIN_DECISION_WRITEUP = 20;   // writing the call up for approval
+
+    /**
+     * Quantifies the run for a business audience: how much analysis was actually done,
+     * what it would have cost a human to do by phone and spreadsheet, and how much money
+     * the recommendation avoids versus the move a person would most plausibly default to.
+     *
+     * <p>The manual baseline is <b>itemised</b> (see {@link ManualTask}) rather than
+     * asserted, so the time-saved figure can be argued with rather than just believed.
+     */
+    private ImpactSummary buildImpact(Ctx ctx, List<Draft> all, Draft best, int agentCount,
+                                      boolean distribution, long runtimeMs) {
+        Shipment s = ctx.s();
+        FulfilmentPlan p = best.plan;
+
+        int carriers = distribution
+                ? erp.transportersForLane(s.route()).size()
+                : safe(s.candidateCarrierIds()).size();
+        int depots = distribution ? erp.rdcs().size() : 0;
+        int skus = distribution ? erp.skus().size() : 0;
+        int channels = distribution ? erp.salesChannels().size() : 0;
+        int cities = distribution ? planner.destinations(s).size() : 1;
+        int departments = distribution ? erp.departments().size() : 0;
+        int demandLines = distribution ? skus * cities * channels : 0;
+        int units = distribution ? totalUnits(s) : 0;
+        int unitsProtected = p != null ? p.onTimeUnits() : 0;
+        int options = all.size();
+
+        // Every discrete record the agents actually read this run.
+        int dataPoints = erp.snapshot().vehicles().size()
+                + erp.snapshot().carriers().size()
+                + erp.snapshot().lanes().size()
+                + erp.snapshot().advisories().size()
+                + erp.snapshot().servicePoints().size()
+                + erp.snapshot().distributionCentres().size()
+                + skus + channels + departments
+                + erp.transportersForLane(s.route()).size()
+                + depots * Math.max(1, skus)   // per-SKU cover rows
+                + demandLines
+                + 3;                           // weather x2 + e-way-bill clock
+
+        // ── the manual baseline, itemised ──
+        List<ManualTask> manual = new ArrayList<>();
+        if (carriers > 0) {
+            manual.add(new ManualTask(
+                    "Ring " + carriers + " " + (distribution ? "transporters" : "carriers")
+                            + " for availability, rate and ETA", carriers * MIN_PER_CARRIER_CALL));
+        }
+        if (depots > 0) {
+            manual.add(new ManualTask("Call " + depots + " depots for a stock report",
+                    depots * MIN_PER_DEPOT_CALL));
+            manual.add(new ManualTask(
+                    "Convert depot cover from DAYS into allocatable UNITS (" + skus + " SKUs x " + depots + " depots)",
+                    skus * depots * MIN_PER_SKU_DEPOT_RECONCILE));
+        }
+        if (demandLines > 0) {
+            manual.add(new ManualTask(
+                    "Hand-allocate " + fmt(demandLines) + " demand lines (SKU x city x channel) by priority in Excel",
+                    demandLines * MIN_PER_DEMAND_LINE));
+        }
+        manual.add(new ManualTask("Check weather, road advisories and the e-way-bill clock", MIN_EXTERNAL_CHECKS));
+        manual.add(new ManualTask("Build a landed cost for each of the " + options + " recovery options",
+                options * MIN_PER_OPTION_COSTING));
+        if (departments > 0) {
+            manual.add(new ManualTask("Brief " + departments + " departments on what changed",
+                    departments * MIN_PER_DEPARTMENT_CALL));
+        }
+        manual.add(new ManualTask("Write the decision up for approval", MIN_DECISION_WRITEUP));
+
+        int manualMinutes = manual.stream().mapToInt(ManualTask::minutes).sum();
+        double towerMinutes = runtimeMs / 60000.0;
+        double hoursSaved = round1((manualMinutes - towerMinutes) / 60.0);
+
+        // ── what the recommendation avoids vs the move a person would default to ──
+        // Truck-first instinct: repair it. Failing that, "just call the cheapest carrier".
+        Draft baseline = all.stream().filter(d -> "REPAIR".equals(d.type)).findFirst()
+                .orElseGet(() -> all.stream()
+                        .filter(d -> "EXTERNAL_CARRIER".equals(d.type) || "REPLACEMENT_TRANSPORTER".equals(d.type))
+                        .min((a, b) -> Long.compare(a.transport, b.transport))
+                        .orElseGet(() -> all.stream()
+                                .max((a, b) -> Long.compare(a.expectedCost, b.expectedCost))
+                                .orElse(best)));
+        long costAvoided = Math.max(0, baseline.expectedCost - best.expectedCost);
+        long penaltyAvoided = distribution && p != null && baseline.plan != null
+                ? Math.max(0, baseline.plan.penaltyInr() - p.penaltyInr())
+                : Math.max(0, (baseline.penaltyEV + baseline.spoilageEV + baseline.stockoutEV)
+                        - (best.penaltyEV + best.spoilageEV + best.stockoutEV));
+
+        // ── headline tiles ──
+        List<ImpactStat> headline = new ArrayList<>();
+        headline.add(new ImpactStat("Decision time",
+                runtimeMs < 1000 ? runtimeMs + " ms" : fmt(round1(runtimeMs / 1000.0)) + " s",
+                "measured, end to end"));
+        headline.add(new ImpactStat("Manual equivalent", fmt(round1(manualMinutes / 60.0)) + " hrs",
+                "phone + spreadsheet, itemised below"));
+        headline.add(new ImpactStat("Time saved", fmt(hoursSaved) + " hrs", "per disruption event"));
+        headline.add(new ImpactStat("Cost avoided", "INR " + fmt(costAvoided),
+                "vs \"" + baseline.title + "\""));
+        headline.add(new ImpactStat("Specialist agents", String.valueOf(agentCount), "run in parallel"));
+        headline.add(new ImpactStat("Factors considered", String.valueOf(
+                        distribution ? FACTOR_CATALOG_SIZE_DISTRIBUTION : FACTOR_CATALOG_SIZE),
+                "across " + (distribution ? 18 : 12) + " domains"));
+        headline.add(new ImpactStat("Recovery options", String.valueOf(options), "generated and fully costed"));
+        headline.add(new ImpactStat("Data points read", fmt(dataPoints), "ERP records + live signals"));
+        if (distribution) {
+            headline.add(new ImpactStat("Units re-planned", fmt(units),
+                    fmt(unitsProtected) + " served inside promise"));
+            headline.add(new ImpactStat("Demand lines allocated", fmt(demandLines),
+                    skus + " SKUs x " + cities + " cities x " + channels + " channels"));
+            headline.add(new ImpactStat("Sales channels protected",
+                    (p == null ? 0 : p.channelTotals().stream().filter(c -> c.fillPct() >= 100).count()) + " / " + channels,
+                    "fully served inside their promise window"));
+            headline.add(new ImpactStat("Penalty avoided", "INR " + fmt(penaltyAvoided),
+                    "channel service penalties"));
+            headline.add(new ImpactStat("Departments coordinated", String.valueOf(departments),
+                    "each with a specific action"));
+        }
+
+        // ── narrative ──
+        String narrative;
+        if (distribution) {
+            narrative = String.format(
+                    "This single disruption was resolved in %s. Doing it by hand - ringing %d transporters and %d depots, converting their cover from days into units, hand-allocating %s demand lines across %d SKUs, %d cities and %d consumer channels, costing %d recovery options, then briefing %d departments - is roughly %s hours of an analyst's day, and it is the kind of work that gets rushed at 2am and done badly. The tower protected %s of %s units inside their promise windows. It wipes out INR %s of channel service penalty outright; after paying for the extra depot legs that buy it, the net saving against the move most people default to (\"%s\") is INR %s. Multiply that by every breakdown in a year.",
+                    runtimeMs < 1000 ? runtimeMs + " milliseconds" : fmt(round1(runtimeMs / 1000.0)) + " seconds",
+                    carriers, depots, fmt(demandLines), skus, cities, channels, options, departments,
+                    fmt(round1(manualMinutes / 60.0)), fmt(unitsProtected), fmt(units),
+                    fmt(penaltyAvoided), baseline.title, fmt(costAvoided));
+        } else {
+            narrative = String.format(
+                    "This disruption was resolved in %s. By hand - ringing %d carriers, checking weather, road advisories and the e-way-bill clock, then building a landed cost for %d options - is roughly %s hours. The tower avoided INR %s against the move most people default to (\"%s\"), and it did so by pricing what each option costs WHEN IT FAILS, not just what it costs to book.",
+                    runtimeMs < 1000 ? runtimeMs + " milliseconds" : fmt(round1(runtimeMs / 1000.0)) + " seconds",
+                    carriers, options, fmt(round1(manualMinutes / 60.0)),
+                    fmt(costAvoided), baseline.title);
+        }
+
+        return new ImpactSummary(agentCount,
+                distribution ? FACTOR_CATALOG_SIZE_DISTRIBUTION : FACTOR_CATALOG_SIZE,
+                options, dataPoints, demandLines, skus, channels, cities, depots, departments,
+                units, unitsProtected, runtimeMs, manualMinutes, hoursSaved,
+                baseline.title, baseline.expectedCost, costAvoided, penaltyAvoided,
+                headline, manual, narrative);
     }
 
     /** The concrete reason the winner beat this particular rival. */
