@@ -240,12 +240,37 @@ original Node/Express/Prisma backend, which now lives only in git history.)
   always on.)
 - **Moderation:** wordlist + optional AI. Flag → auto-ban at 5 flags. Admin dashboard.
 - **Admin** (`ADMIN_EMAILS`): delete any question/comment, view flagged users, ban/unban,
-  verification review, **seed starter content** (`POST /api/admin/seed`), send test digest.
-  Seed uses **replace semantics**: each run deletes the legacy prototype accounts
-  (`demo_user`/`user_two`) + prior seed members (content cascades away) then inserts 5 realistic
-  members (Priya Sharma, Daniel Okafor, Rahul Verma, Ana Ferreira, Meera Iyer) with 5 practitioner-
-  voice Q&As + 12 answers across Digital&AI / Demand Planning / Warehousing / Procurement / Careers.
-  Safe to re-run. Seed text is ASCII-only (avoids cp1252 mojibake like the old "K�rber").
+  verification review, **seed starter content** (`POST /api/admin/seed`), **run a day of community
+  activity** (`POST /api/admin/activity/run`), send test digest.
+- **Seeded community + daily activity (reworked 2026-07-19).** Three files:
+  - `SeedRoster` — the cast: **20 members** across all 6 member types (planners, warehouse, transport,
+    cold chain, procurement, ESG, quick-commerce, customs, a founder, a researcher, a student, an
+    academic…) **plus a `csce_desk` moderator** with `role=ADMIN`. **The moderator deliberately has NO
+    `passwordHash`** — it is privileged and this repo is public, so it must never be loggable-into. It
+    exists only as the identity that marks answers verified.
+  - `SeedContent` — one ordered pool of **30 practitioner-voice topics** (title + body + 3 answers each,
+    across all 11 tags). Consumed from the front so a question is **never posted twice**.
+  - `SeedService` — replace semantics (deletes legacy `demo_user`/`user_two` + all prior roster accounts,
+    content cascading away, then re-inserts). Back-dates `BACKLOG_SIZE=14` topics across **~45 days**,
+    with 2–3 answers each from varied members, question **and** answer upvotes, and the moderator marking
+    ~60% of threads' top answer verified (`Question.acceptedCommentId`). Fixed RNG seed so a re-seed
+    reproduces the same believable spread. Also seeds 9 jobs + 6 templates.
+  - `CommunityActivityService` — **`@Scheduled(cron "0 15 9 * * *", Asia/Kolkata)`**: each morning a
+    roster member asks the next unused pooled topic, 2–3 others answer, the thread picks up upvotes, and
+    the moderator verifies a strong answer on an *older* thread (`VERIFY_LOOKBACK_DAYS=7`). The thread is
+    back-dated 8h so answers read naturally instead of every timestamp being "just now". Disable with
+    **`COMMUNITY_ACTIVITY_ENABLED=false`**. Writes **straight to the repositories, bypassing
+    `QuestionController`** — deliberately, so auto-generated content **never emails real members**.
+    NOTE: the RNG is seeded on `day*31 + topicIndex`, not the day alone — an early version seeded on the
+    day only, so three manual runs in one day produced the *same author and identical vote counts*.
+  - Measured after seed + 3 activity runs: 20 members + moderator, 17 questions (**17 distinct authors**),
+    40 answers (19 distinct authors), 48 question upvotes, 245 answer upvotes, 13 verified answers,
+    **0 duplicate titles**, history spanning 44 days → 8 hours ago.
+  - Seed text is ASCII-only (avoids cp1252 mojibake like the old "K?rber").
+  - **Known risk, deliberate:** the 20 *member* accounts share the demo password `password123`
+    (`SEED_MEMBERS_HAVE_DEMO_PASSWORD`) so the owner can sign in as them while demoing — but the repo is
+    public, so those logins are effectively public. Flip that constant to `false` to make every seeded
+    account content-only. The moderator is already unaffected (no password).
 - **Events & webinars** (`/events`): admins create, members RSVP; upcoming/past sections.
 - **Mentorship** (`/mentorship`): opt in as mentor/mentee at onboarding; browse + connect via DMs.
 - **Weekly digest email:** top-5 questions of the week to all non-banned users, Mondays.
@@ -280,7 +305,9 @@ backend/
     service/   Json (DTO shaping incl. notification()/job()/template()), QuestionService (TAGS×11, toJson, tagLabel), ModerationService (wordlist||AI),
                AiModerationClient (Anthropic SDK — moderation + isSupplyChainRelevant verify),
                MailService (Resend HTTP API preferred + JavaMail SMTP fallback, no-op until configured), DigestService (@Scheduled + manual test),
-               NotificationService (@Async new-question/DM emails), InAppNotifier (in-app 🔔: answers/replies/accepts/mentions), SeedService (idempotent starter content),
+               NotificationService (@Async new-question/DM emails), InAppNotifier (in-app 🔔: answers/replies/accepts/mentions),
+               SeedRoster (20 members + no-password ADMIN moderator) + SeedContent (30-topic pool) + SeedService (replace-semantics seed, back-dated history),
+               CommunityActivityService (@Scheduled daily: one pooled question + answers + upvotes + moderator verification; COMMUNITY_ACTIVITY_ENABLED),
                UploadStorage (interface: saveImage + saveFile) + LocalUploadStorage (default, ./uploads) + AzureBlobUploadStorage (env-gated object storage),
                erp/ErpPort (SAP-swap interface; + skus/salesChannels/departments/rdcs/transporters/loadLines) + erp/SimulatedErpAdapter,
                agents/ExternalSignals (LIVE Open-Meteo weather + festival calendar + computed e-way-bill clock, fail-safe),
@@ -326,6 +353,7 @@ k8s/  00-namespace, 01-secrets (dev placeholders), 02-postgres, 03-backend (imag
 | `SMTP_HOST`/`_PORT`/`_USER`/`_PASS`/`_FROM` | fallback | SMTP backend for hosts that allow it. Powers the same email set. **On Railway SMTP is blocked → use `RESEND_API_KEY` instead.** |
 | `EXPOSE_DEV_OTP` | no | **Default `false`.** When `true` (local `docker-compose` only), an OTP that couldn't be emailed is returned as `devOtp` in the API response for testing. **Never set in prod** — with it off, if email fails the API **fails closed** (no code leak) instead of exposing the OTP. |
 | `APP_URL` | no | used in email links. Prod = the Railway URL. |
+| `COMMUNITY_ACTIVITY_ENABLED` | no | **Default `true`.** Drives `CommunityActivityService`: one seeded discussion per day at 09:15 IST (question + answers + upvotes + moderator verification) so the forum doesn't look dead pre-launch. Set `false` once there's genuine traffic. Never emails real members. |
 | `AZURE_STORAGE_CONNECTION_STRING` | no | **Unset → uploads go to local `./uploads` disk** (fine for one instance/Railway). Set it → images upload to Azure Blob instead (`AzureBlobUploadStorage`), returning absolute blob URLs. This is the config-only switch that unblocks running multiple replicas (local disk isn't shared). Relaxed-binds to `azure.storage.connection-string`. |
 | `AZURE_STORAGE_CONTAINER` | no | default `forum-uploads`. Blob container name; auto-created (public-blob read) on first boot when Azure storage is enabled. |
 

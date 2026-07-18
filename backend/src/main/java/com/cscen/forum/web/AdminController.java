@@ -5,6 +5,7 @@ import com.cscen.forum.model.User;
 import com.cscen.forum.repo.ModerationEventRepository;
 import com.cscen.forum.repo.UserRepository;
 import com.cscen.forum.security.CurrentUser;
+import com.cscen.forum.service.CommunityActivityService;
 import com.cscen.forum.service.DigestService;
 import com.cscen.forum.service.Json;
 import com.cscen.forum.service.SeedService;
@@ -33,16 +34,18 @@ public class AdminController {
     private final DigestService digest;
     private final SeedService seed;
     private final GeminiNewsSyncService newsSync;
+    private final CommunityActivityService activity;
 
     public AdminController(UserRepository users, ModerationEventRepository events,
                            CurrentUser currentUser, DigestService digest, SeedService seed,
-                           GeminiNewsSyncService newsSync) {
+                           GeminiNewsSyncService newsSync, CommunityActivityService activity) {
         this.users = users;
         this.events = events;
         this.currentUser = currentUser;
         this.digest = digest;
         this.seed = seed;
         this.newsSync = newsSync;
+        this.activity = activity;
     }
 
     /** Fire the weekly digest immediately (for testing SMTP configuration). */
@@ -64,6 +67,17 @@ public class AdminController {
     public Map<String, Object> seedContent(HttpServletRequest http) {
         currentUser.requireAdmin(http);
         return Map.of("result", seed.seed());
+    }
+
+    /**
+     * Run one day of community activity immediately (a member asks the next pooled
+     * question, others answer and upvote, the moderator verifies an older answer).
+     * Same work the daily 09:15 IST scheduler does - useful for demoing without waiting.
+     */
+    @PostMapping("/activity/run")
+    public Map<String, Object> runActivity(HttpServletRequest http) {
+        currentUser.requireAdmin(http);
+        return Map.of("result", activity.runOnce());
     }
 
     /** Members awaiting supply-chain verification review (PENDING or REJECTED). */

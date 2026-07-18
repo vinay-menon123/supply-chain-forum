@@ -6,9 +6,16 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 
 public interface QuestionRepository extends JpaRepository<Question, String> {
+
+    /** Used by the daily community activity job so a pooled topic is never posted twice. */
+    boolean existsByTitle(String title);
+
+    /** Recent threads still waiting for the moderator to verify an answer. */
+    List<Question> findByAcceptedCommentIdIsNullAndCreatedAtAfterOrderByCreatedAtDesc(Instant since);
 
     String FILTER = """
             (:q = '' or lower(q.title) like :like or lower(q.body) like :like)
