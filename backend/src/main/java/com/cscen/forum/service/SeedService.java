@@ -14,6 +14,9 @@ import com.cscen.forum.repo.UserRepository;
 import com.cscen.forum.repo.VoteRepository;
 import com.cscen.forum.service.SeedContent.Topic;
 import com.cscen.forum.service.SeedRoster.Member;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,21 +47,29 @@ import java.util.Random;
 @Service
 public class SeedService {
 
+    private static final Logger log = LoggerFactory.getLogger(SeedService.class);
+
     /** Legacy placeholder accounts from the original prototype. */
     private static final List<String> LEGACY_USERNAMES = List.of("demo_user", "user_two");
 
-    /**
-     * Shared demo password for the seeded MEMBER accounts so the owner can sign in
-     * as them while demoing. The moderator deliberately gets none - see
-     * {@link #person}. NOTE: this repository is public, so these member logins are
-     * effectively public too; set to false to make every seeded account
-     * content-only and impossible to log into.
-     */
-    private static final boolean SEED_MEMBERS_HAVE_DEMO_PASSWORD = true;
-    private static final String DEMO_PASSWORD = "password123";
-
     /** Fixed so a re-seed reproduces the same believable spread of activity. */
     private static final long RANDOM_SEED = 20260714L;
+
+    /**
+     * Optional sign-in password for the seeded MEMBER accounts, read from
+     * {@code SEED_DEMO_PASSWORD}.
+     *
+     * <p><b>Unset by default, and that is the safe default.</b> This repository is
+     * public, so a password committed here would be a public credential for every
+     * seeded account on production - anyone could post as one of these members. With
+     * it unset the seeded members have no password hash at all and are content
+     * authors only, exactly as intended.
+     *
+     * <p>Set it in a local {@code .env} (never in Railway) if you want to sign in as
+     * a seeded member while demoing. The moderator never gets one either way, because
+     * it holds {@code role=ADMIN} - see {@link #person}.
+     */
+    private final String demoPassword;
 
     private final UserRepository users;
     private final QuestionRepository questions;
@@ -70,7 +81,7 @@ public class SeedService {
 
     public SeedService(UserRepository users, QuestionRepository questions, CommentRepository comments,
                        JobRepository jobs, TemplateRepository templates, VoteRepository votes,
-                       UploadStorage uploads) {
+                       UploadStorage uploads, Environment env) {
         this.users = users;
         this.comments = comments;
         this.questions = questions;
@@ -78,6 +89,11 @@ public class SeedService {
         this.templates = templates;
         this.votes = votes;
         this.uploads = uploads;
+        this.demoPassword = env.getProperty("SEED_DEMO_PASSWORD", "").trim();
+        if (!demoPassword.isBlank()) {
+            log.warn("SEED_DEMO_PASSWORD is set - seeded member accounts will be sign-in-able. "
+                    + "Do not set this in production.");
+        }
     }
 
     @Transactional
@@ -88,7 +104,7 @@ public class SeedService {
         Map<String, User> byUsername = new HashMap<>();
         List<User> members = new ArrayList<>();
         for (Member m : SeedRoster.MEMBERS) {
-            User u = person(m, SEED_MEMBERS_HAVE_DEMO_PASSWORD, false);
+            User u = person(m, !demoPassword.isBlank(), false);
             members.add(u);
             byUsername.put(m.username(), u);
         }
@@ -143,7 +159,10 @@ public class SeedService {
         return "reset " + removed + " prior accounts; seeded " + members.size() + " members + 1 moderator, "
                 + q + " questions, " + a + " answers, " + upvotes + " upvotes, "
                 + verified + " verified answers, " + j + " jobs, " + t + " templates. "
-                + "Daily activity will continue from topic " + backlog + " of " + SeedContent.TOPICS.size() + ".";
+                + "Daily activity will continue from topic " + backlog + " of " + SeedContent.TOPICS.size() + ". "
+                + (demoPassword.isBlank()
+                        ? "Seeded accounts are content-only (no password - cannot be signed into)."
+                        : "WARNING: SEED_DEMO_PASSWORD is set, so seeded members CAN be signed into.");
     }
 
     /** Remove legacy prototype accounts and any prior roster accounts (content cascades). */
@@ -188,9 +207,9 @@ public class SeedService {
         if (admin) {
             u.setRole("ADMIN");
         }
-        // The moderator is privileged, so it must never carry a known password.
+        // The moderator is privileged, so it must never carry a password at all.
         if (withPassword && !admin) {
-            u.setPasswordHash(sha256(DEMO_PASSWORD));
+            u.setPasswordHash(sha256(demoPassword));
         }
         return users.save(u);
     }

@@ -267,10 +267,16 @@ original Node/Express/Prisma backend, which now lives only in git history.)
     40 answers (19 distinct authors), 48 question upvotes, 245 answer upvotes, 13 verified answers,
     **0 duplicate titles**, history spanning 44 days → 8 hours ago.
   - Seed text is ASCII-only (avoids cp1252 mojibake like the old "K?rber").
-  - **Known risk, deliberate:** the 20 *member* accounts share the demo password `password123`
-    (`SEED_MEMBERS_HAVE_DEMO_PASSWORD`) so the owner can sign in as them while demoing — but the repo is
-    public, so those logins are effectively public. Flip that constant to `false` to make every seeded
-    account content-only. The moderator is already unaffected (no password).
+  - **Credentials — fixed 2026-07-19.** Seeded accounts now have **no `passwordHash` by default**: they
+    are content authors only and cannot be signed into. Previously every seeded member carried a
+    hard-coded `password123`, which on a **public repo** meant anyone could sign in as e.g.
+    `priya_sharma` on production and post as them. The password is no longer in the source at all — set
+    **`SEED_DEMO_PASSWORD`** in a local `.env` (**never on Railway**) if you want sign-in-able seed
+    members for a demo; the seed response and a startup `log.warn` both say plainly when it's on. The
+    `csce_desk` moderator holds `role=ADMIN` and **never** gets a password regardless of that variable.
+    Verified: after a re-seed, 0 of 21 seeded accounts have a hash and a login attempt with the old
+    password is rejected. **Any already-deployed DB keeps the old hashes until `POST /api/admin/seed`
+    is re-run there.**
 - **Events & webinars** (`/events`): admins create, members RSVP; upcoming/past sections.
 - **Mentorship** (`/mentorship`): opt in as mentor/mentee at onboarding; browse + connect via DMs.
 - **Weekly digest email:** top-5 questions of the week to all non-banned users, Mondays.
@@ -354,6 +360,7 @@ k8s/  00-namespace, 01-secrets (dev placeholders), 02-postgres, 03-backend (imag
 | `EXPOSE_DEV_OTP` | no | **Default `false`.** When `true` (local `docker-compose` only), an OTP that couldn't be emailed is returned as `devOtp` in the API response for testing. **Never set in prod** — with it off, if email fails the API **fails closed** (no code leak) instead of exposing the OTP. |
 | `APP_URL` | no | used in email links. Prod = the Railway URL. |
 | `COMMUNITY_ACTIVITY_ENABLED` | no | **Default `true`.** Drives `CommunityActivityService`: one seeded discussion per day at 09:15 IST (question + answers + upvotes + moderator verification) so the forum doesn't look dead pre-launch. Set `false` once there's genuine traffic. Never emails real members. |
+| `SEED_DEMO_PASSWORD` | no | **Unset by default — leave it that way in prod.** When unset, seeded members have no password and are content-only. Set it locally to sign in as a seeded member while demoing. **Never set on Railway:** the roster is in a public repo, so a password here is a public credential for 20 accounts. The `csce_desk` ADMIN moderator never gets a password either way. |
 | `AZURE_STORAGE_CONNECTION_STRING` | no | **Unset → uploads go to local `./uploads` disk** (fine for one instance/Railway). Set it → images upload to Azure Blob instead (`AzureBlobUploadStorage`), returning absolute blob URLs. This is the config-only switch that unblocks running multiple replicas (local disk isn't shared). Relaxed-binds to `azure.storage.connection-string`. |
 | `AZURE_STORAGE_CONTAINER` | no | default `forum-uploads`. Blob container name; auto-created (public-blob read) on first boot when Azure storage is enabled. |
 
