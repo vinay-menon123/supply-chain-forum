@@ -35,12 +35,10 @@ export default function Login() {
   const [sendingOtp, setSendingOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
 
-  // Login Fields — email-based (email doubles as the OTP destination)
+  // Login Fields — email/username + password only. No OTP on login by design;
+  // the email one-time code is only for account creation and password reset.
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const [loginOtp, setLoginOtp] = useState("");
-  const [sendingLoginOtp, setSendingLoginOtp] = useState(false);
-  const [loginOtpSent, setLoginOtpSent] = useState(false);
 
   // Forgot-password flow (a mode within the Login tab)
   const [forgotMode, setForgotMode] = useState(false);
@@ -58,34 +56,21 @@ export default function Login() {
     );
   }
 
-  async function handleSendOtp(emailVal: string, isForLogin: boolean) {
+  // Sends the account-creation OTP (register only — login no longer uses one).
+  async function handleSendOtp(emailVal: string) {
     if (!emailVal) {
       setError("Please enter a valid email address first");
       return;
     }
     setError("");
     setSuccess("");
-    if (isForLogin) setSendingLoginOtp(true);
-    else setSendingOtp(true);
+    setSendingOtp(true);
 
     try {
-      const data = await api<{ success: boolean; message: string; devOtp?: string; notRegistered?: boolean }>(
+      const data = await api<{ success: boolean; message: string; devOtp?: string }>(
         "/auth/send-otp",
-        {
-          method: "POST",
-          body: JSON.stringify({ email: emailVal, intent: isForLogin ? "login" : "register" }),
-        }
+        { method: "POST", body: JSON.stringify({ email: emailVal, intent: "register" }) }
       );
-
-      // Login with an unregistered email → bounce to Create Account, prefilled.
-      if (isForLogin && data.notRegistered) {
-        setActiveTab("register");
-        setRegEmail(emailVal);
-        setLoginOtpSent(false);
-        setSuccess("");
-        setError(`No account found for ${emailVal}. Please create an account to continue.`);
-        return;
-      }
 
       // Server couldn't send the code (e.g. email temporarily unavailable). Don't
       // advance to the OTP step — surface the message so the user can retry.
@@ -97,17 +82,14 @@ export default function Login() {
       let msg = data.message;
       if (data.devOtp) {
         msg += `. Dev Mode OTP code: ${data.devOtp} (Auto-filled)`;
-        if (isForLogin) setLoginOtp(data.devOtp);
-        else setRegOtp(data.devOtp);
+        setRegOtp(data.devOtp);
       }
       setSuccess(msg);
-      if (isForLogin) setLoginOtpSent(true);
-      else setOtpSent(true);
+      setOtpSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send verification code");
     } finally {
-      if (isForLogin) setSendingLoginOtp(false);
-      else setSendingOtp(false);
+      setSendingOtp(false);
     }
   }
 
@@ -173,23 +155,12 @@ export default function Login() {
       return;
     }
 
-    if (!loginOtpSent) {
-      setError("Please send and enter the verification code to authenticate");
-      return;
-    }
-
-    if (!loginOtp) {
-      setError("Verification code (OTP) is required");
-      return;
-    }
-
     try {
       const data = await api<{ token: string; user: User }>("/auth/login", {
         method: "POST",
         body: JSON.stringify({
           usernameOrEmail: loginEmail,
           password: loginPassword,
-          otp: loginOtp,
         }),
       });
       login(data.token, data.user);
@@ -199,7 +170,7 @@ export default function Login() {
         navigate(from, { replace: true });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid credentials or verification code");
+      setError(err instanceof Error ? err.message : "Invalid credentials");
     }
   }
 
@@ -462,29 +433,17 @@ export default function Login() {
           <form onSubmit={handleLogin} className="space-y-4 text-left">
             <div>
               <label className="block text-xs font-semibold text-white uppercase tracking-wider mb-1.5">
-                Email
+                Email or username
               </label>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  className="flex-1 bg-[#0F0F12] border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#5E6AD2] focus:ring-1 focus:ring-[#5E6AD2]/50 transition-all"
-                  required
-                />
-                <button
-                  type="button"
-                  disabled={sendingLoginOtp || !loginEmail}
-                  onClick={() => handleSendOtp(loginEmail, true)}
-                  className="bg-white/5 hover:bg-white/10 text-white border border-white/10 py-2 px-3 rounded-lg text-xs font-semibold disabled:opacity-40 transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  {sendingLoginOtp ? "Sending..." : loginOtpSent ? "Resend" : "Send OTP"}
-                </button>
-              </div>
-              <p className="text-[10px] text-[#8A8F98] mt-1.5">
-                We'll email a one-time code. No account with this email? You'll be taken to Create Account.
-              </p>
+              <input
+                type="text"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="you@company.com"
+                autoComplete="username"
+                className="w-full bg-[#0F0F12] border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#5E6AD2] focus:ring-1 focus:ring-[#5E6AD2]/50 transition-all"
+                required
+              />
             </div>
 
             <div>
@@ -496,6 +455,7 @@ export default function Login() {
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
                 placeholder="Enter password"
+                autoComplete="current-password"
                 className="w-full bg-[#0F0F12] border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#5E6AD2] focus:ring-1 focus:ring-[#5E6AD2]/50 transition-all"
                 required
               />
@@ -509,23 +469,6 @@ export default function Login() {
                 </button>
               </div>
             </div>
-
-            {loginOtpSent && (
-              <div>
-                <label className="block text-xs font-semibold text-white uppercase tracking-wider mb-1.5">
-                  Verification Code (OTP)
-                </label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={loginOtp}
-                  onChange={(e) => setLoginOtp(e.target.value)}
-                  placeholder="Enter 6-digit OTP code"
-                  className="w-full bg-[#0F0F12] border border-white/10 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#5E6AD2] focus:ring-1 focus:ring-[#5E6AD2]/50 transition-all text-center tracking-widest font-mono"
-                  required
-                />
-              </div>
-            )}
 
             <button
               type="submit"
@@ -735,7 +678,7 @@ export default function Login() {
                 <button
                   type="button"
                   disabled={sendingOtp || !regEmail}
-                  onClick={() => handleSendOtp(regEmail, false)}
+                  onClick={() => handleSendOtp(regEmail)}
                   className="bg-white/5 hover:bg-white/10 text-white border border-white/10 py-2 px-3 rounded-lg text-xs font-semibold disabled:opacity-40 transition-colors cursor-pointer"
                 >
                   {sendingOtp ? "Sending..." : otpSent ? "Resend" : "Send OTP"}

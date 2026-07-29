@@ -228,31 +228,28 @@ public class AuthController {
 
     public record LoginRequest(
         String usernameOrEmail,
-        String password,
-        String otp
+        String password
     ) {}
 
+    /**
+     * Sign in with email/username + password. No OTP here by design - the email
+     * one-time code is only used to prove inbox ownership when it actually matters:
+     * creating an account (/register) and resetting a forgotten password
+     * (/reset-password). Day-to-day login is a single step.
+     */
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody LoginRequest request) {
         if (request == null || request.usernameOrEmail() == null || request.password() == null) {
             throw ApiException.badRequest("Missing username/email or password");
         }
-        
+
         String input = request.usernameOrEmail().trim().toLowerCase(Locale.ROOT);
         User user = users.findByEmail(input)
                 .or(() -> users.findByUsername(input))
                 .orElseThrow(() -> ApiException.badRequest("Invalid credentials"));
-                
+
         if (user.getPasswordHash() == null || !user.getPasswordHash().equals(hashPassword(request.password()))) {
             throw ApiException.badRequest("Invalid credentials");
-        }
-        
-        if (request.otp() == null || request.otp().isBlank()) {
-            throw ApiException.badRequest("Verification code (OTP) is required");
-        }
-
-        if (!consumeOtp(user.getEmail(), request.otp())) {
-            throw ApiException.badRequest("Invalid or expired verification code (OTP)");
         }
 
         return Map.of("token", jwtService.sign(user.getId()), "user", Json.privateUser(user));

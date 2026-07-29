@@ -49,7 +49,8 @@ original Node/Express/Prisma backend, which now lives only in git history.)
 - `hibernate.jdbc.time_zone=UTC`, `Instant` fields.
 - Auth: **jjwt 0.12** — HS256. Key rule: if `JWT_SECRET` ≥ 32 bytes, raw bytes are the key
   (preserves Railway session continuity); otherwise SHA-256-stretched. Test tokens must match.
-  Login = email/username + password (SHA-256 hash) + email OTP; see `web/AuthController.java`.
+  Login = email/username + password (SHA-256 hash), **single step, no OTP** (email OTP is only for
+  register + reset — changed 2026-07-19); see `web/AuthController.java`.
   (Google Sign-In removed — the `GoogleIdTokenVerifier`/google-api-client path is gone.)
 - AI moderation: **Anthropic Java SDK** `com.anthropic:anthropic-java:2.34.0`. Model default
   `claude-opus-4-8` (override via `ANTHROPIC_MODEL`), `maxTokens=256`, no thinking param,
@@ -64,11 +65,13 @@ original Node/Express/Prisma backend, which now lives only in git history.)
 
 ## 4. Features (all shipped)
 
-- **Auth:** **email + password with an email OTP** (2-step) — `AuthController` `/send-otp`,
-  `/register`, `/login`, `/reset-password`. OTP is a 6-digit code, single-use, **5-min TTL**
-  (`otpStorage`, in-memory), emailed via `MailService`. When mail can't send, the response includes a
-  `devOtp` **only if `EXPOSE_DEV_OTP=true`** (local); in prod (flag off) it **fails closed**
-  (`success:false`, no code leak) so verification can't be bypassed. JWT Bearer. Onboarding at
+- **Auth:** **email/username + password**. **Login is a single step — no OTP** (changed 2026-07-19):
+  `/login` takes just `{usernameOrEmail, password}`. The **email OTP is only used where it proves inbox
+  ownership**: creating an account (`/register`) and resetting a forgotten password (`/reset-password`).
+  `AuthController` `/send-otp`, `/register`, `/login`, `/reset-password`. OTP is a 6-digit code,
+  single-use, **5-min TTL** (`otpStorage`, in-memory), emailed via `MailService`. When mail can't send,
+  the response includes a `devOtp` **only if `EXPOSE_DEV_OTP=true`** (local); in prod (flag off) it
+  **fails closed** (`success:false`, no code leak) so verification can't be bypassed. JWT Bearer. Onboarding at
   `/welcome` (topic selection). (Google Sign-In was removed; `GOOGLE_CLIENT_ID` is now unused and
   `/api/auth/config` returns an empty client id.)
 - **Forgot password:** "Forgot password?" on the Login page opens a reset panel — email →
