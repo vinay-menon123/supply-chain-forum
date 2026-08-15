@@ -224,6 +224,24 @@ original Node/Express/Prisma backend, which now lives only in git history.)
   description + download + upvote); Jobs cards likewise open a JD modal (no upvote). Files go through
   `UploadStorage.saveFile`/`saveBytes` (local disk default, Azure Blob when configured, doc-ext allowlist).
   Public; wordlist/AI moderated; owner/admin delete.
+- **Vendor sourcing (`/sourcing`, navbar "🔎 Sourcing", added 2026-07-19):** a buyer describes a requirement
+  ("pallet racks for a warehouse") + region (+ optional quantity/unit) and gets **where to buy it and a rough
+  market price**. Same **honesty discipline as the control tower** — clearly split into what's real vs estimated:
+  - **Marketplace links = real + deterministic + live**: `SourcingService.marketplaceLinks` builds actual search
+    deep-links (URL-encoded) into **IndiaMART, TradeIndia, Amazon Business, Alibaba, Google Shopping** for the
+    requirement+region. Always available (even with no AI key), verifiable by the user.
+  - **Price band / vendors / MOQ / lead times = AI market estimate**, NOT a live scrape (B2B marketplaces are
+    anti-bot / ToS-gated — same reason LinkedIn scraping isn't done). Uses `AgentAiClient.complete` (Anthropic →
+    Gemini → templated), returns JSON `{category, specSummary, priceBand{low,typical,high,unit,currency},
+    vendors[], costDrivers[], buyingTips[], summary}`, parsed into `SourcingReport`. Every report carries a
+    `dataBasis` string stating plainly it's indicative. **Templated fallback** (no AI key / parse error) still
+    returns the real marketplace links + generic guidance, so the feature never breaks.
+  - Endpoints: `GET /api/sourcing/config` (aiEnabled/provider/defaultRegion/examples, `requireUser`),
+    `POST /api/sourcing/analyze {requirement, region, quantity?, unit?}` → `SourcingReport` (`requireActiveUser`).
+    Frontend `pages/Sourcing.tsx`: intake + example chips, price-band hero (low/typical/high), vendor cards with
+    confidence chips, marketplace link buttons (open in new tab), cost-drivers + buying-tips columns, honesty banner.
+    **No DB** — pure computation + one LLM call. Verified live: reach-truck forklift → ₹18–35 lakh/unit with
+    Godrej/Jungheinrich/Toyota; pallet racks → ₹18k–40k/bay with Godrej/Mecalux. Decision-support only.
 - **Marketplace + Pricing — REMOVED (2026-07-06).** Pulled pre-launch until there are real users
   (monetization before liquidity = friction). Deleted: `MarketplaceController`, `Listing`,
   `MarketplaceLead`, their repos, `Json.listing`, `notifyNewListing`, the `/admin/plan` endpoint +
@@ -322,11 +340,12 @@ backend/
                agents/ExternalSignals (LIVE Open-Meteo weather + festival calendar + computed e-way-bill clock, fail-safe),
                agents/DistributionPlanner (demand side: RDC lendable capacity, penalty-greedy channel allocation, fill matrix, backfill),
                AgentAiClient (Anthropic|Gemini completion, fallback),
-               AgentOrchestrator (12-agent risk-adjusted expected-landed-cost engine; 18 agents + fulfilment plan when the load has SKU x channel lines)
+               AgentOrchestrator (12-agent risk-adjusted expected-landed-cost engine; 18 agents + fulfilment plan when the load has SKU x channel lines),
+               SourcingService (vendor sourcing: real marketplace search deep-links + AI market-price estimate, templated fallback)
     web/       AuthController (google/profile/me — profile now takes topics/linkedin/headline/bio + runs verify),
                QuestionController (create/comment/accept fire in-app notifications + mentions), UserController, LeaderboardController, MessageController,
                NotificationController (/api/notifications), JobController (/api/jobs), TemplateController (/api/templates),
-               AgentController (/api/agents — control-tower ERP snapshot + run),
+               AgentController (/api/agents — control-tower ERP snapshot + run), SourcingController (/api/sourcing — vendor sourcing config + analyze),
                AdminController (flagged/ban/verify/pending/seed/digest), EventController, MentorshipController, HealthController, ApiException
 
 frontend/
@@ -338,7 +357,7 @@ frontend/
     poll.ts (startVisibilityInterval — polls only while tab visible; used by Navbar unread + bell + MessageThread)
     components/  Navbar (responsive + hamburger + 🔔 bell), QuestionCard, VoteButton, ShareButton, MemberTypeBadge, TopicPicker, RichText (@mention linkify), Calculators (SCM Tools tab)
     pages/       Landing, Login, Feed (+follow-topics widget), Ask, QuestionDetail, Profile (+verify/badges),
-                 Leaderboard, Events, Mentorship, Jobs, Templates, Agents (AI control tower), Notifications, Welcome (+topics/linkedin), Settings,
+                 Leaderboard, Events, Mentorship, Jobs, Templates, Agents (AI control tower), Sourcing (vendor sourcing), Notifications, Welcome (+topics/linkedin), Settings,
                  Messages, MessageThread, Admin (+verify review + seed/digest tools)
 
 k8s/  00-namespace, 01-secrets (dev placeholders), 02-postgres, 03-backend (image :vN), 04-frontend (image :vN)

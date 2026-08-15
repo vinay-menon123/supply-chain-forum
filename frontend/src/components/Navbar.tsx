@@ -10,6 +10,7 @@ const PRIMARY = [
   { to: "/ask", label: "Ask" },
   { to: "/jobs", label: "Jobs" },
   { to: "/agents", label: "🤖 Agents" },
+  { to: "/sourcing", label: "🔎 Sourcing" },
 ];
 const COMMUNITY = [
   { to: "/templates", label: "📚 Templates" },

@@ -1,3 +1,42 @@
+// ── Vendor sourcing ──
+export interface PriceBand {
+  low: number;
+  typical: number;
+  high: number;
+  unit: string;
+  currency: string;
+}
+export interface VendorSource {
+  name: string;
+  type: string;
+  regionCoverage: string;
+  priceRange: string;
+  moq: string;
+  leadTime: string;
+  note: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | string;
+}
+export interface MarketplaceLink {
+  marketplace: string;
+  url: string;
+  note: string;
+}
+export interface SourcingReport {
+  requirement: string;
+  region: string;
+  category: string;
+  specSummary: string;
+  priceBand: PriceBand;
+  vendors: VendorSource[];
+  marketplaceLinks: MarketplaceLink[];
+  costDrivers: string[];
+  buyingTips: string[];
+  summary: string;
+  aiPowered: boolean;
+  aiProvider: string;
+  dataBasis: string;
+}
+
 export interface User {
   id: string;
   username: string;

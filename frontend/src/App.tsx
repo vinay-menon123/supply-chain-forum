@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import Admin from "./pages/Admin";
 import Agents from "./pages/Agents";
 import Ask from "./pages/Ask";
+import Sourcing from "./pages/Sourcing";
 import Events from "./pages/Events";
 import Feed from "./pages/Feed";
 import Jobs from "./pages/Jobs";
@@ -153,6 +154,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <Agents />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/sourcing"
+            element={
+              <RequireAuth>
+                <Sourcing />
               </RequireAuth>
             }
           />
