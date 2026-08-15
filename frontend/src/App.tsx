@@ -2,7 +2,6 @@ import { ReactNode, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
 import Navbar from "./components/Navbar";
-import BackgroundNetwork from "./components/BackgroundNetwork";
 import { Link } from "react-router-dom";
 import Admin from "./pages/Admin";
 import Agents from "./pages/Agents";
@@ -50,28 +49,18 @@ export default function App() {
 
   return (
     <div className="relative flex min-h-screen flex-col text-foreground font-sans selection:bg-accent/30 selection:text-white">
-      {/* Calm, slowly drifting multi-hue aurora (global, every screen). No scroll
-          parallax on purpose — driving it from React scroll state re-rendered the whole
-          app per scroll frame. The blobs drift on their own (translate-only, cheap), and
-          all motion is disabled under prefers-reduced-motion (see index.css). */}
+      {/* Calm layered aurora — painted ONCE, no continuous animation. A moving
+          background (animated blur, a full-screen particle canvas, a repainting grid)
+          was pinning the GPU every frame and making the whole app lag. The look stays;
+          the per-frame cost is gone. A static blurred fixed layer composites for free,
+          so scrolling opaque content over it is smooth. */}
       <div className="app-aurora">
-        <div className="blob left-[-15%] top-[-12%] h-[40rem] w-[40rem] bg-accent/[0.40] animate-drift" />
-        <div
-          className="blob right-[-12%] top-[2%] h-[34rem] w-[34rem] bg-violet-600/[0.34] animate-float-slow"
-          style={{ animationDelay: "2s" }}
-        />
-        <div
-          className="blob hidden bottom-[-16%] left-[16%] h-[38rem] w-[38rem] bg-indigo-500/[0.30] animate-drift-slow md:block"
-          style={{ animationDelay: "5s" }}
-        />
-        <div
-          className="blob hidden bottom-[-8%] right-[12%] h-[32rem] w-[32rem] bg-sky-500/[0.26] animate-float md:block"
-          style={{ animationDelay: "3s" }}
-        />
-        {/* Grid overlay with slow drift */}
+        <div className="blob left-[-15%] top-[-12%] h-[40rem] w-[40rem] bg-accent/[0.35]" />
+        <div className="blob right-[-12%] top-[2%] h-[34rem] w-[34rem] bg-violet-600/[0.30]" />
+        <div className="blob hidden bottom-[-14%] left-[14%] h-[34rem] w-[34rem] bg-indigo-500/[0.26] md:block" />
+        {/* Static grid texture (no drift animation) */}
         <div className="absolute inset-0 grid-pattern pointer-events-none" />
       </div>
-      <BackgroundNetwork />
 
       <Navbar />
       {user?.isBanned && (

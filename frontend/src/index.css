@@ -125,13 +125,11 @@
     @apply bg-gradient-to-b from-white via-white/95 to-white/70 bg-clip-text text-transparent;
   }
   
-  /* Animated floating blobs. Blur radius kept modest (blur cost scales with radius)
-     and the layer is promoted so the translate-only drift is a pure compositor move. */
+  /* Static aurora blobs — no animation, so no per-frame paint. Painted once into the
+     -z-20 layer; `contain` isolates them from the rest of the page's paint. */
   .blob {
     @apply pointer-events-none absolute rounded-full blur-[80px];
-    will-change: transform;
-    transform: translateZ(0);
-    contain: layout paint;
+    contain: layout paint style;
   }
   
   .card-lift {
@@ -161,12 +159,12 @@
     opacity: 1;
   }
   
+  /* Static grid texture — the drift animation repainted the whole viewport every frame. */
   .grid-pattern {
-    background-image: 
+    background-image:
       linear-gradient(to right, rgba(255, 255, 255, 0.012) 1px, transparent 1px),
       linear-gradient(to bottom, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
     background-size: 64px 64px;
-    animation: grid-drift 40s linear infinite;
   }
 }
 
