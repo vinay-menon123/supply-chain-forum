@@ -924,7 +924,7 @@ export default function Agents() {
           </div>
 
           {/* Run bar */}
-          <div className="sticky bottom-4 z-10 mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-bg-base/90 p-4 backdrop-blur-xl">
+          <div className="sticky bottom-4 z-10 mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-bg-base/95 p-4 backdrop-blur-md">
             <div className="min-w-0 text-sm">
               {selected ? (
                 <>

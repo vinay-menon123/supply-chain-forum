@@ -302,10 +302,21 @@ original Node/Express/Prisma backend, which now lives only in git history.)
 - **Mentorship** (`/mentorship`): opt in as mentor/mentee at onboarding; browse + connect via DMs.
 - **Weekly digest email:** top-5 questions of the week to all non-banned users, Mondays.
 - **UI:** animated landing page (signed-out only, with feature grid), animated login/feed/navbar,
-  **calm layered background** — floating aurora blobs (`.app-aurora`, `-z-20`) + a slow drifting
+  **calm layered background** — 4 floating aurora blobs (`.app-aurora`, `-z-20`) + a slow drifting
   connected-node particle canvas (`components/BackgroundNetwork.tsx`, `-z-10`, mounted globally in
   `App.tsx`), both respecting `prefers-reduced-motion`. **Mobile-responsive navbar (hamburger at
   `< lg`)**, dark mode.
+- **Background performance (fixed 2026-07-19 — was "very laggy even on desktop/incognito").** The aurora
+  looked great and janked hard. Four independent paint costs, all runtime (invisible to any network
+  measurement — the API is sub-second): (1) the `float`/`drift` keyframes animated **`scale()` on
+  `blur-[120px]` 800px blobs**, which re-rasterizes the whole blurred texture every frame — now
+  **translate-only** (a free compositor slide) and blur cut to `blur-[80px]`; (2) `.card` had
+  **`backdrop-blur-md` on every card** (dozens on the feed) — removed, replaced by a near-opaque base
+  (`bg-[#0d0d11]/85`); (3) the navbar's fixed **`backdrop-blur-xl` re-blurred on every scroll frame** —
+  dropped to `backdrop-blur-sm` + more opaque; (4) aurora parallax was driven by **`scrollY` React state**,
+  re-rendering the whole app tree per scroll frame — **removed** (blobs self-drift instead). Blob count
+  6→4. Rule going forward: **never animate `scale`/`rotate`/`filter` on a blurred layer, and never drive
+  a per-frame visual from React scroll state.** The "calm drifting" look the owner asked for is preserved.
 
 ---
 

@@ -73,8 +73,11 @@
   }
 
   /* Glassmorphic Bento Cards */
+  /* No backdrop-blur here on purpose: a live backdrop blur on every card (dozens on
+     the feed) was a major scroll/paint cost. A near-opaque base over the dark ground
+     looks the same without sampling+blurring what's behind it. */
   .card {
-    @apply rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_2px_20px_rgba(0,0,0,0.45),0_0_40px_rgba(0,0,0,0.25)] transition-all duration-300 backdrop-blur-md w-full min-w-0 overflow-hidden;
+    @apply rounded-2xl border border-white/[0.06] bg-[#0d0d11]/85 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_2px_20px_rgba(0,0,0,0.45),0_0_40px_rgba(0,0,0,0.25)] transition-all duration-300 w-full min-w-0 overflow-hidden;
   }
   
   .card-hover {
@@ -122,10 +125,13 @@
     @apply bg-gradient-to-b from-white via-white/95 to-white/70 bg-clip-text text-transparent;
   }
   
-  /* Animated floating blobs */
+  /* Animated floating blobs. Blur radius kept modest (blur cost scales with radius)
+     and the layer is promoted so the translate-only drift is a pure compositor move. */
   .blob {
-    @apply pointer-events-none absolute rounded-full blur-[120px];
+    @apply pointer-events-none absolute rounded-full blur-[80px];
     will-change: transform;
+    transform: translateZ(0);
+    contain: layout paint;
   }
   
   .card-lift {

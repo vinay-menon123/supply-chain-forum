@@ -23,16 +23,20 @@ export default {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },
         },
+        // Translate-only on purpose: these drive the big blurred aurora blobs, and
+        // animating scale/rotate on a blur-[80px] layer re-rasterizes the whole blurred
+        // texture every frame (the cause of desktop lag). Pure translate is a free
+        // compositor move, so the drift stays but the paint cost disappears.
         float: {
-          "0%, 100%": { transform: "translateY(0) scale(1)" },
-          "50%": { transform: "translateY(-28px) scale(1.06)" },
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-26px)" },
         },
         drift: {
-          "0%": { transform: "translate(0px, 0px) scale(1)" },
-          "25%": { transform: "translate(40px, -30px) scale(1.06)" },
-          "50%": { transform: "translate(-25px, 25px) scale(1.12)" },
-          "75%": { transform: "translate(25px, 35px) scale(1.04)" },
-          "100%": { transform: "translate(0px, 0px) scale(1)" },
+          "0%": { transform: "translate(0px, 0px)" },
+          "25%": { transform: "translate(38px, -28px)" },
+          "50%": { transform: "translate(-24px, 24px)" },
+          "75%": { transform: "translate(24px, 32px)" },
+          "100%": { transform: "translate(0px, 0px)" },
         },
         "gradient-x": {
           "0%, 100%": { backgroundPosition: "0% 50%" },

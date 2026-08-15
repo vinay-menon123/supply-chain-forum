@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
 import Navbar from "./components/Navbar";
@@ -40,65 +40,35 @@ function RequireAuth({ children }: { children: ReactNode }) {
 export default function App() {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
     // Force dark mode globally for the Linear theme
     document.documentElement.classList.add("dark");
-
-    const handleScroll = () => setScrollY(window.scrollY);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const isLanding = location.pathname === "/landing" || (!user && location.pathname === "/");
 
   return (
     <div className="relative flex min-h-screen flex-col text-foreground font-sans selection:bg-accent/30 selection:text-white">
-      {/* Cinematic Layered Background System — calm, slowly drifting multi-hue
-          aurora across three parallax depths (global, so it shows on every screen).
-          All motion is disabled under prefers-reduced-motion (see index.css). */}
+      {/* Calm, slowly drifting multi-hue aurora (global, every screen). No scroll
+          parallax on purpose — driving it from React scroll state re-rendered the whole
+          app per scroll frame. The blobs drift on their own (translate-only, cheap), and
+          all motion is disabled under prefers-reduced-motion (see index.css). */}
       <div className="app-aurora">
-        {/* Far layer — slow forward parallax */}
+        <div className="blob left-[-15%] top-[-12%] h-[40rem] w-[40rem] bg-accent/[0.40] animate-drift" />
         <div
-          style={{ transform: `translateY(${scrollY * 0.12}px)` }}
-          className="absolute inset-0 pointer-events-none"
-        >
-          <div className="blob left-[-15%] top-[-12%] h-[52rem] w-[52rem] bg-accent/[0.45] animate-drift" />
-          <div
-            className="blob right-[-12%] top-[4%] h-[40rem] w-[40rem] bg-violet-600/[0.38] animate-float-slow"
-            style={{ animationDelay: '2s' }}
-          />
-        </div>
-        {/* Mid layer — gentle reverse parallax */}
+          className="blob right-[-12%] top-[2%] h-[34rem] w-[34rem] bg-violet-600/[0.34] animate-float-slow"
+          style={{ animationDelay: "2s" }}
+        />
         <div
-          style={{ transform: `translateY(${scrollY * -0.06}px)` }}
-          className="absolute inset-0 pointer-events-none hidden md:block"
-        >
-          <div
-            className="blob right-[-8%] top-[38%] h-[38rem] w-[38rem] bg-indigo-500/[0.38] animate-drift-slow"
-            style={{ animationDelay: '4s' }}
-          />
-          <div
-            className="blob left-[6%] top-[46%] h-[34rem] w-[34rem] bg-sky-500/[0.30] animate-float"
-            style={{ animationDelay: '1s' }}
-          />
-        </div>
-        {/* Near layer — subtle forward parallax */}
+          className="blob hidden bottom-[-16%] left-[16%] h-[38rem] w-[38rem] bg-indigo-500/[0.30] animate-drift-slow md:block"
+          style={{ animationDelay: "5s" }}
+        />
         <div
-          style={{ transform: `translateY(${scrollY * 0.04}px)` }}
-          className="absolute inset-0 pointer-events-none hidden md:block"
-        >
-          <div
-            className="blob bottom-[-18%] left-[18%] h-[46rem] w-[46rem] bg-accent/[0.35] animate-drift"
-            style={{ animationDelay: '6s' }}
-          />
-          <div
-            className="blob bottom-[-10%] right-[14%] h-[36rem] w-[36rem] bg-fuchsia-600/[0.30] animate-float-slow"
-            style={{ animationDelay: '3s' }}
-          />
-        </div>
-        {/* Grid Overlay with Drift Animation */}
+          className="blob hidden bottom-[-8%] right-[12%] h-[32rem] w-[32rem] bg-sky-500/[0.26] animate-float md:block"
+          style={{ animationDelay: "3s" }}
+        />
+        {/* Grid overlay with slow drift */}
         <div className="absolute inset-0 grid-pattern pointer-events-none" />
       </div>
       <BackgroundNetwork />

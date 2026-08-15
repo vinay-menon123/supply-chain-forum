@@ -80,7 +80,7 @@ export default function Navbar() {
   const communityActive = COMMUNITY.some((l) => isActive(l.to));
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-bg-base/70 backdrop-blur-xl text-foreground font-sans">
+    <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-bg-base/90 backdrop-blur-sm text-foreground font-sans">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
         {/* Brand */}
         <Link
@@ -117,7 +117,7 @@ export default function Navbar() {
               </svg>
             </button>
             {dropdown === "community" && (
-              <div className="absolute left-0 top-full z-50 mt-2 w-44 rounded-xl border border-white/10 bg-bg-base/95 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+              <div className="absolute left-0 top-full z-50 mt-2 w-44 rounded-xl border border-white/10 bg-bg-base/95 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-sm">
                 {COMMUNITY.map((l) => (
                   <Link
                     key={l.to}
@@ -193,7 +193,7 @@ export default function Navbar() {
                   </svg>
                 </button>
                 {dropdown === "account" && (
-                  <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl border border-white/10 bg-bg-base/95 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+                  <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl border border-white/10 bg-bg-base/95 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-sm">
                     <div className="px-3 py-2 border-b border-white/[0.06] mb-1">
                       <p className="truncate text-sm font-semibold text-white">{user.name ?? user.username}</p>
                       <p className="truncate text-[11px] text-[#8A8F98]">@{user.username}</p>
@@ -278,7 +278,7 @@ export default function Navbar() {
 
       {/* Mobile dropdown panel */}
       {menuOpen && (
-        <div className="animate-fade-in border-t border-white/[0.06] bg-bg-base/95 px-6 py-4 backdrop-blur-xl lg:hidden">
+        <div className="animate-fade-in border-t border-white/[0.06] bg-bg-base/95 px-6 py-4 backdrop-blur-sm lg:hidden">
           {user && (
             <Link
               to={`/users/${user.username}`}
